@@ -1,0 +1,47 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "WyreStorm NetworkHD Controller",
+        "description": "Enter the SSH connection details for your WyreStorm NetworkHD controller. This integration connects to the controller over SSH to manage your matrix switching system.",
+        "data": {
+          "host": "Controller IP Address",
+          "username": "SSH Username",
+          "password": "SSH Password",
+          "port": "SSH Port",
+          "update_interval": "Update Interval (seconds)"
+        },
+        "data_description": {
+          "host": "The IP address of your WyreStorm NetworkHD controller",
+          "username": "SSH username for the controller (default: wyrestorm)",
+          "password": "SSH password for the controller (default: networkhd)",
+          "port": "SSH port for the controller (default: 10022)",
+          "update_interval": "How often to poll for device status updates (10-300 seconds)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to the controller. Please check the IP address and network connectivity.",
+      "invalid_auth": "Invalid SSH credentials. Please check your username and password.",
+      "timeout": "Connection timed out. Please check the controller is powered on and accessible.",
+      "unknown": "Unexpected error occurred during setup."
+    },
+    "abort": {
+      "already_configured": "A WyreStorm NetworkHD Controller with this IP address is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "WyreStorm NetworkHD Options",
+        "description": "Configure advanced options for the WyreStorm NetworkHD integration.",
+        "data": {
+          "update_interval": "Update interval (seconds)"
+        },
+        "data_description": {
+          "update_interval": "How often to poll for device status updates (10-300 seconds)"
+        }
+      }
+    }
+  }
+}

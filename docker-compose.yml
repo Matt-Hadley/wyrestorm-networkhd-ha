@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  homeassistant:
+    container_name: ha-wyrestorm-dev
+    image: ghcr.io/home-assistant/home-assistant:stable
+    restart: unless-stopped
+    privileged: true
+    # network_mode: host  # Commented out - causes issues on macOS Docker Desktop
+    ports:
+      - "8123:8123"
+    volumes:
+      # Home Assistant configuration
+      - ./ha-dev/config:/config
+      # Mount our integration for development
+      - ./custom_components/wyrestorm_networkhd:/config/custom_components/wyrestorm_networkhd:ro
+      # Time sync
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - TZ=America/New_York  # Change to your timezone
+    
+  # Optional: MQTT for testing (if you need it later)
+  # mosquitto:
+  #   container_name: ha-mqtt-dev
+  #   image: eclipse-mosquitto:latest
+  #   restart: unless-stopped
+  #   ports:
+  #     - "1883:1883"
+  #   volumes:
+  #     - ./mqtt/config:/mosquitto/config
+  #     - ./mqtt/data:/mosquitto/data
+  #     - ./mqtt/log:/mosquitto/log
