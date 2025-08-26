@@ -24,6 +24,7 @@
       "cannot_connect": "Failed to connect to the controller. Please check the IP address and network connectivity.",
       "invalid_auth": "Invalid SSH credentials. Please check your username and password.",
       "timeout": "Connection timed out. Please check the controller is powered on and accessible.",
+      "host_key_verification_failed": "SSH host key verification failed. Please check the controller's network configuration and try again.",
       "unknown": "Unexpected error occurred during setup."
     },
     "abort": {

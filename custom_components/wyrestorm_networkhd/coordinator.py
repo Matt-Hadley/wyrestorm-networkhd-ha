@@ -1,4 +1,9 @@
-"""WyreStorm NetworkHD Coordinator."""
+"""WyreStorm NetworkHD Coordinator.
+
+This module provides the main data coordinator for the WyreStorm NetworkHD
+Home Assistant integration. The coordinator manages device connections,
+data fetching, and real-time notifications from the NetworkHD controller.
+"""
 import asyncio
 import logging
 from typing import Any
@@ -10,7 +15,6 @@ from homeassistant.helpers import device_registry as dr
 from wyrestorm_networkhd import NetworkHDClientSSH, NHDAPI
 
 from .const import (
-    UPDATE_INTERVAL_FAST,
     RETRY_ATTEMPTS,
     RETRY_DELAY,
 )
@@ -19,7 +23,24 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class WyreStormCoordinator(DataUpdateCoordinator[dict[str, Any]]):
-    """WyreStorm NetworkHD data coordinator."""
+    """WyreStorm NetworkHD data coordinator.
+    
+    Manages data fetching, device state synchronization, and real-time
+    notifications for WyreStorm NetworkHD matrix switching systems.
+    
+    This coordinator handles:
+    - Periodic device status polling
+    - Real-time notification processing from SSH connection
+    - Device discovery and state management
+    - Matrix routing configuration
+    - Connection recovery and retry logic
+    
+    Attributes:
+        api: NHDAPI client for device communication
+        client: SSH client for network connection
+        host: Device hostname/IP address
+        _notification_task: Background task for handling notifications
+    """
 
     def __init__(
         self,
@@ -29,7 +50,15 @@ class WyreStormCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         host: str,
         update_interval_seconds: int = 60,
     ) -> None:
-        """Initialize coordinator."""
+        """Initialize coordinator.
+        
+        Args:
+            hass: Home Assistant instance
+            api: Configured NHDAPI client for device communication
+            client: SSH client connected to the NetworkHD controller
+            host: Device hostname or IP address
+            update_interval_seconds: Polling interval in seconds (default: 60)
+        """
         from datetime import timedelta
         super().__init__(
             hass,
@@ -79,116 +108,243 @@ class WyreStormCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     raise
 
     async def async_shutdown(self) -> None:
-        """Shut down the coordinator."""
-        # Cancel notification task
+        """Shut down the coordinator safely."""
+        _LOGGER.debug("Starting coordinator shutdown...")
+        
+        # Cancel notification task first and wait for it to complete
         if self._notification_task and not self._notification_task.done():
+            _LOGGER.debug("Cancelling notification task...")
             self._notification_task.cancel()
+            try:
+                await self._notification_task
+            except asyncio.CancelledError:
+                _LOGGER.debug("Notification task cancelled successfully")
+            except Exception as err:
+                _LOGGER.warning("Error during notification task cancellation: %s", err)
+        
+        # Then disconnect client
+        if self.client and self.client.is_connected():
+            try:
+                _LOGGER.debug("Disconnecting client...")
+                await self.client.disconnect()
+                _LOGGER.debug("Client disconnected successfully")
+            except Exception as err:
+                _LOGGER.warning("Error disconnecting client: %s", err)
             
-        # Disconnect client
-        if self.client.is_connected():
-            await self.client.disconnect()
-            
-        _LOGGER.debug("WyreStorm coordinator shutdown complete")
+        _LOGGER.info("WyreStorm coordinator shutdown complete")
 
     def _setup_notifications(self) -> None:
         """Set up real-time notifications."""
         
-        def handle_endpoint_notification(notification):
+        def handle_endpoint_notification(notification) -> None:
             """Handle endpoint status notifications."""
             _LOGGER.debug("Endpoint notification: %s", notification)
             
-            # Parse endpoint notification and update device online status
-            if self.data and "devices" in self.data:
-                try:
-                    # Extract device information from notification
-                    device_id = None
-                    online_status = None
-                    
-                    if hasattr(notification, 'device_id'):
-                        device_id = notification.device_id
-                    elif hasattr(notification, 'device'):
-                        device_id = notification.device
-                    elif isinstance(notification, dict):
-                        device_id = notification.get('device_id') or notification.get('device') or notification.get('aliasName')
-                    
-                    if hasattr(notification, 'online'):
-                        online_status = notification.online
-                    elif hasattr(notification, 'status'):
-                        online_status = notification.status == 'online'
-                    elif isinstance(notification, dict):
-                        online_status = notification.get('online')
-                        if online_status is None and 'status' in notification:
-                            online_status = notification['status'] == 'online'
-                    
-                    # Update device data if we have both device ID and status
-                    if device_id and device_id in self.data["devices"] and online_status is not None:
-                        self.data["devices"][device_id]["online"] = bool(online_status)
-                        _LOGGER.info("Updated online status for %s: %s", device_id, online_status)
-                    
-                except Exception as err:
-                    _LOGGER.error("Error processing endpoint notification: %s", err)
+            # Validate coordinator state before processing
+            if not self.data or "devices" not in self.data:
+                _LOGGER.warning("Coordinator data not available for notification processing")
+                return
             
-            # Trigger coordinator update
-            self.async_set_updated_data(self.data)
+            try:
+                # Extract device information from notification with validation
+                device_id = self._extract_device_id_from_notification(notification)
+                online_status = self._extract_online_status_from_notification(notification)
+                
+                # Update device data if we have valid device ID and status
+                if (device_id and 
+                    device_id in self.data["devices"] and 
+                    online_status is not None):
+                    
+                    self.data["devices"][device_id]["online"] = bool(online_status)
+                    _LOGGER.info("Updated online status for %s: %s", device_id, online_status)
+                    
+                    # Trigger coordinator update
+                    self.async_set_updated_data(self.data)
+                else:
+                    _LOGGER.debug("Invalid notification data: device_id=%s, status=%s", 
+                                device_id, online_status)
+                    
+            except (KeyError, AttributeError, TypeError) as err:
+                _LOGGER.warning("Malformed endpoint notification: %s - %s", type(err).__name__, err)
+            except Exception as err:
+                _LOGGER.error("Critical error processing endpoint notification: %s", err)
+                # Don't update coordinator data if processing failed critically
             
-        def handle_video_notification(notification):
+        def handle_video_notification(notification) -> None:
             """Handle video input notifications."""
             _LOGGER.debug("Video notification: %s", notification)
             
-            # Parse video notification and update HDMI activity status
-            if self.data and "devices" in self.data:
-                try:
-                    # Extract device information from notification
-                    device_id = None
-                    hdmi_in_active = None
-                    hdmi_out_active = None
+            # Validate coordinator state before processing
+            if not self.data or "devices" not in self.data:
+                _LOGGER.warning("Coordinator data not available for notification processing")
+                return
+                
+            try:
+                # Extract device information from notification with validation
+                device_id = self._extract_device_id_from_notification(notification)
+                hdmi_in_active = self._extract_hdmi_in_status_from_notification(notification)
+                hdmi_out_active = self._extract_hdmi_out_status_from_notification(notification)
+                
+                # Update device data if we have device ID and valid status changes
+                if device_id and device_id in self.data["devices"]:
+                    updated = False
+                    device_data = self.data["devices"][device_id]
                     
-                    if hasattr(notification, 'device_id'):
-                        device_id = notification.device_id
-                    elif hasattr(notification, 'device'):
-                        device_id = notification.device
-                    elif isinstance(notification, dict):
-                        device_id = notification.get('device_id') or notification.get('device') or notification.get('aliasName')
+                    if hdmi_in_active is not None:
+                        device_data["hdmi_in_active"] = bool(hdmi_in_active)
+                        updated = True
+                    if hdmi_out_active is not None:
+                        device_data["hdmi_out_active"] = bool(hdmi_out_active)
+                        updated = True
                     
-                    # Check for HDMI input activity
-                    if hasattr(notification, 'hdmi_in_active'):
-                        hdmi_in_active = notification.hdmi_in_active
-                    elif isinstance(notification, dict):
-                        hdmi_in_active = notification.get('hdmi_in_active')
-                        if hdmi_in_active is None and 'hdmi in active' in notification:
-                            hdmi_in_active = notification['hdmi in active'] == 'true'
+                    if updated:
+                        _LOGGER.info("Updated HDMI activity for %s: in=%s, out=%s", 
+                                   device_id, hdmi_in_active, hdmi_out_active)
+                        # Trigger coordinator update
+                        self.async_set_updated_data(self.data)
+                else:
+                    _LOGGER.debug("Invalid video notification: device_id=%s", device_id)
                     
-                    # Check for HDMI output activity
-                    if hasattr(notification, 'hdmi_out_active'):
-                        hdmi_out_active = notification.hdmi_out_active
-                    elif isinstance(notification, dict):
-                        hdmi_out_active = notification.get('hdmi_out_active')
-                        if hdmi_out_active is None and 'hdmi out active' in notification:
-                            hdmi_out_active = notification['hdmi out active'] == 'true'
-                    
-                    # Update device data if we have device ID and status changes
-                    if device_id and device_id in self.data["devices"]:
-                        updated = False
-                        if hdmi_in_active is not None:
-                            self.data["devices"][device_id]["hdmi_in_active"] = bool(hdmi_in_active)
-                            updated = True
-                        if hdmi_out_active is not None:
-                            self.data["devices"][device_id]["hdmi_out_active"] = bool(hdmi_out_active)
-                            updated = True
-                        
-                        if updated:
-                            _LOGGER.info("Updated HDMI activity for %s: in=%s, out=%s", 
-                                        device_id, hdmi_in_active, hdmi_out_active)
-                    
-                except Exception as err:
-                    _LOGGER.error("Error processing video notification: %s", err)
-            
-            # Trigger coordinator update
-            self.async_set_updated_data(self.data)
+            except (KeyError, AttributeError, TypeError) as err:
+                _LOGGER.warning("Malformed video notification: %s - %s", type(err).__name__, err)
+            except Exception as err:
+                _LOGGER.error("Critical error processing video notification: %s", err)
+                # Don't update coordinator data if processing failed critically
 
         # Register notification callbacks
         self.client.register_notification_callback("endpoint", handle_endpoint_notification)
         self.client.register_notification_callback("video", handle_video_notification)
+
+    def _extract_device_id_from_notification(self, notification: Any) -> str | None:
+        """Extract device ID from notification safely."""
+        try:
+            if hasattr(notification, 'device_id'):
+                return notification.device_id
+            elif hasattr(notification, 'device'):
+                return notification.device
+            elif isinstance(notification, dict):
+                return (notification.get('device_id') or 
+                       notification.get('device') or 
+                       notification.get('aliasName'))
+        except (AttributeError, KeyError):
+            pass
+        return None
+
+    def _extract_online_status_from_notification(self, notification: Any) -> bool | None:
+        """Extract online status from notification safely."""
+        try:
+            if hasattr(notification, 'online'):
+                return bool(notification.online)
+            elif hasattr(notification, 'status'):
+                return notification.status == 'online'
+            elif isinstance(notification, dict):
+                online_status = notification.get('online')
+                if online_status is not None:
+                    return bool(online_status)
+                if 'status' in notification:
+                    return notification['status'] == 'online'
+        except (AttributeError, KeyError, TypeError):
+            pass
+        return None
+
+    def _extract_hdmi_in_status_from_notification(self, notification: Any) -> bool | None:
+        """Extract HDMI input status from notification safely."""
+        try:
+            if hasattr(notification, 'hdmi_in_active'):
+                return bool(notification.hdmi_in_active)
+            elif isinstance(notification, dict):
+                hdmi_in_active = notification.get('hdmi_in_active')
+                if hdmi_in_active is not None:
+                    return bool(hdmi_in_active)
+                if 'hdmi in active' in notification:
+                    return notification['hdmi in active'] == 'true'
+        except (AttributeError, KeyError, TypeError):
+            pass
+        return None
+
+    def _extract_hdmi_out_status_from_notification(self, notification: Any) -> bool | None:
+        """Extract HDMI output status from notification safely."""
+        try:
+            if hasattr(notification, 'hdmi_out_active'):
+                return bool(notification.hdmi_out_active)
+            elif isinstance(notification, dict):
+                hdmi_out_active = notification.get('hdmi_out_active')
+                if hdmi_out_active is not None:
+                    return bool(hdmi_out_active)
+                if 'hdmi out active' in notification:
+                    return notification['hdmi out active'] == 'true'
+        except (AttributeError, KeyError, TypeError):
+            pass
+        return None
+
+    def _validate_device_json(self, device_json: Any) -> list[dict[str, Any]]:
+        """Validate and clean device JSON response."""
+        if not isinstance(device_json, list):
+            _LOGGER.warning("Invalid device JSON structure, expected list, got %s", type(device_json))
+            return []
+        
+        valid_devices = []
+        for item in device_json:
+            if isinstance(item, dict) and item.get('aliasName'):
+                valid_devices.append(item)
+            else:
+                _LOGGER.debug("Skipping invalid device JSON item: %s", item)
+        
+        return valid_devices
+
+    def _validate_device_status(self, device_status: Any) -> dict[str, Any]:
+        """Validate and clean device status response."""
+        if not isinstance(device_status, dict):
+            _LOGGER.warning("Invalid device status structure, expected dict, got %s", type(device_status))
+            return {}
+        
+        if "devices status" not in device_status:
+            _LOGGER.warning("Device status missing 'devices status' key")
+            return {}
+        
+        devices_status = device_status.get("devices status", [])
+        if not isinstance(devices_status, list):
+            _LOGGER.warning("Device status 'devices status' should be list, got %s", type(devices_status))
+            return {"devices status": []}
+        
+        valid_status_list = []
+        for item in devices_status:
+            if isinstance(item, dict) and item.get('aliasname'):
+                valid_status_list.append(item)
+            else:
+                _LOGGER.debug("Skipping invalid device status item: %s", item)
+        
+        return {"devices status": valid_status_list}
+
+    def _validate_matrix_response(self, matrix: Any) -> dict[str, Any]:
+        """Validate and clean matrix response."""
+        if matrix is None:
+            return {}
+        
+        # Handle both object and dict responses
+        if hasattr(matrix, 'assignments'):
+            assignments = matrix.assignments
+        elif isinstance(matrix, dict) and 'assignments' in matrix:
+            assignments = matrix['assignments']
+        else:
+            _LOGGER.warning("Invalid matrix response structure: %s", type(matrix))
+            return {}
+        
+        if not isinstance(assignments, list):
+            _LOGGER.warning("Matrix assignments should be list, got %s", type(assignments))
+            return {}
+        
+        valid_assignments = []
+        for assignment in assignments:
+            # Validate assignment has required fields
+            if hasattr(assignment, 'tx') and hasattr(assignment, 'rx'):
+                valid_assignments.append(assignment)
+            elif isinstance(assignment, dict) and 'tx' in assignment and 'rx' in assignment:
+                valid_assignments.append(assignment)
+            else:
+                _LOGGER.debug("Skipping invalid matrix assignment: %s", assignment)
+        
+        return {"assignments": valid_assignments}
 
     async def _attempt_reconnect(self) -> bool:
         """Attempt to reconnect to the device."""
@@ -278,33 +434,37 @@ class WyreStormCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                                 await self._attempt_reconnect()
                             await asyncio.sleep(RETRY_DELAY)
                 
-                # If we got any data, process it and return
-                if device_json or matrix or device_status:
-                    _LOGGER.debug("Raw data: device_json=%s devices, matrix=%s (type: %s), device_status=%s (type: %s)", 
-                                 len(device_json) if isinstance(device_json, list) else "unknown", 
-                                 matrix, type(matrix), device_status, type(device_status))
+                # Validate and process the data we received
+                validated_device_json = self._validate_device_json(device_json or [])
+                validated_matrix = self._validate_matrix_response(matrix)
+                validated_device_status = self._validate_device_status(device_status or {})
+                
+                # If we got any valid data, process it and return
+                if validated_device_json or validated_matrix or validated_device_status:
+                    _LOGGER.debug("Validated data: device_json=%d devices, matrix=%d assignments, device_status=%d devices", 
+                                 len(validated_device_json), 
+                                 len(validated_matrix.get('assignments', [])),
+                                 len(validated_device_status.get('devices status', [])))
                     
                     # Raw data will be stored in the returned data structure
                     
                     # Process devices by combining device JSON (online status) with device status (HDMI status)
                     processed_devices = {}
                     
-                    # Create lookup dictionaries from both data sources
+                    # Create lookup dictionaries from validated data sources
                     device_json_dict = {}
-                    if isinstance(device_json, list):
-                        for device_data in device_json:
-                            if isinstance(device_data, dict):
-                                device_id = device_data.get("aliasName", "unknown")
-                                device_json_dict[device_id] = device_data
-                        _LOGGER.debug("Created device JSON lookup for %d devices", len(device_json_dict))
+                    for device_data in validated_device_json:
+                        device_id = device_data.get("aliasName", "unknown")
+                        if device_id != "unknown":
+                            device_json_dict[device_id] = device_data
+                    _LOGGER.debug("Created device JSON lookup for %d devices", len(device_json_dict))
                     
                     device_status_dict = {}
-                    if isinstance(device_status, dict) and "devices status" in device_status:
-                        for status_data in device_status.get("devices status", []):
-                            if isinstance(status_data, dict):
-                                status_alias = status_data.get("aliasname", "unknown")
-                                device_status_dict[status_alias] = status_data
-                        _LOGGER.debug("Created device status lookup for %d devices", len(device_status_dict))
+                    for status_data in validated_device_status.get("devices status", []):
+                        status_alias = status_data.get("aliasname", "unknown")
+                        if status_alias != "unknown":
+                            device_status_dict[status_alias] = status_data
+                    _LOGGER.debug("Created device status lookup for %d devices", len(device_status_dict))
                     
                     # Combine data from both sources
                     if device_json_dict or device_status_dict:
@@ -394,14 +554,10 @@ class WyreStormCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         _LOGGER.warning("No device status data available")
                     
                     # Now process matrix information to fill in current_source and available_sources
-                    if processed_devices and matrix:
+                    if processed_devices and validated_matrix:
                         try:
-                            # Extract matrix assignments
-                            matrix_assignments = []
-                            if hasattr(matrix, 'assignments'):
-                                matrix_assignments = matrix.assignments
-                            elif isinstance(matrix, dict) and 'assignments' in matrix:
-                                matrix_assignments = matrix['assignments']
+                            # Process validated matrix assignments
+                            matrix_assignments = validated_matrix.get('assignments', [])
                             
                             # Process matrix assignments
                             for assignment in matrix_assignments:
@@ -433,8 +589,8 @@ class WyreStormCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     from datetime import datetime
                     data = {
                         "devices": processed_devices,
-                        "matrix": matrix,
-                        "device_status": device_status,
+                        "matrix": validated_matrix,
+                        "device_status": validated_device_status,
                         "last_update": datetime.utcnow().isoformat() + "Z",
                     }
                     
@@ -537,8 +693,9 @@ class WyreStormCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     @property
     def device_info(self) -> dr.DeviceInfo:
         """Return device info for the main hub."""
+        from .const import DOMAIN
         return dr.DeviceInfo(
-            identifiers={(self.host, self.host)},
+            identifiers={(DOMAIN, self.host)},
             name=f"WyreStorm NetworkHD ({self.host})",
             manufacturer="WyreStorm",
             model="NetworkHD Controller",

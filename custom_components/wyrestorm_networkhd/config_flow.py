@@ -14,7 +14,7 @@ from homeassistant.data_entry_flow import FlowResult
 from wyrestorm_networkhd import NetworkHDClientSSH
 from wyrestorm_networkhd.exceptions import NetworkHDError
 
-from .const import DOMAIN, DEFAULT_PORT, DEFAULT_USERNAME, DEFAULT_PASSWORD, DEFAULT_UPDATE_INTERVAL, CONF_UPDATE_INTERVAL
+from .const import DOMAIN, DEFAULT_PORT, DEFAULT_USERNAME, DEFAULT_PASSWORD, DEFAULT_UPDATE_INTERVAL, CONF_UPDATE_INTERVAL, SSH_CONNECT_TIMEOUT, SSH_HOST_KEY_POLICY
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -40,15 +40,16 @@ class WyrestormNetworkHDConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             await self.async_set_unique_id(user_input[CONF_HOST])
             self._abort_if_unique_id_configured()
 
+            client = None
             try:
-                # Test connection
+                # Test connection with balanced security/usability settings
                 client = NetworkHDClientSSH(
                     host=user_input[CONF_HOST],
                     port=user_input.get(CONF_PORT, DEFAULT_PORT),
                     username=user_input[CONF_USERNAME],
                     password=user_input[CONF_PASSWORD],
-                    ssh_host_key_policy="auto_add",
-                    timeout=10.0,
+                    ssh_host_key_policy=SSH_HOST_KEY_POLICY,
+                    timeout=SSH_CONNECT_TIMEOUT,
                 )
                 
                 # Test connection
@@ -58,8 +59,6 @@ class WyrestormNetworkHDConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 from wyrestorm_networkhd import NHDAPI
                 api = NHDAPI(client)
                 await api.api_query.config_get_version()
-                
-                await client.disconnect()
                 
                 # Create entry
                 return self.async_create_entry(
@@ -73,18 +72,21 @@ class WyrestormNetworkHDConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     errors["base"] = "invalid_auth"
                 elif "timeout" in str(err).lower():
                     errors["base"] = "timeout"
+                elif "host key" in str(err).lower():
+                    errors["base"] = "host_key_verification_failed"
                 else:
                     errors["base"] = "cannot_connect"
             except Exception as err:
                 _LOGGER.error("Unexpected error during setup: %s", err)
                 errors["base"] = "unknown"
             finally:
-                # Ensure client is disconnected
-                try:
-                    if client.is_connected():
-                        await client.disconnect()
-                except Exception as disconnect_err:
-                    _LOGGER.debug("Error disconnecting client during cleanup: %s", disconnect_err)
+                # Ensure client is always disconnected
+                if client is not None:
+                    try:
+                        if client.is_connected():
+                            await client.disconnect()
+                    except Exception as disconnect_err:
+                        _LOGGER.debug("Error disconnecting client during cleanup: %s", disconnect_err)
 
         # Show form
         return self.async_show_form(

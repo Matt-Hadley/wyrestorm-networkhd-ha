@@ -139,22 +139,27 @@ class WyreStormSourceSelect(CoordinatorEntity[WyreStormCoordinator], SelectEntit
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return extra state attributes."""
+        """Return all available device attributes dynamically."""
         if not self.coordinator.data:
             return {}
         
         device_data = self.coordinator.data.get("devices", {}).get(self._device_id, {})
         
+        # Start with base attributes
         attributes = {
             "device_id": self._device_id,
             "device_type": self._device_info.get("type", "unknown"),
-            "online": device_data.get("online", False),
+            "model": self._device_info.get("model", "Unknown"),
         }
         
-        if "model" in self._device_info:
-            attributes["model"] = self._device_info["model"]
-        if "available_sources" in device_data:
-            attributes["available_sources"] = device_data["available_sources"]
+        # Add all available device data as attributes, excluding internal/duplicate fields
+        excluded_fields = {"name", "type"}  # Already covered by device_id/device_type
+        
+        for key, value in device_data.items():
+            if key not in excluded_fields and value is not None:
+                # Clean up attribute names for better display
+                clean_key = key.replace("_", " ").title()
+                attributes[clean_key] = value
             
         return attributes
 

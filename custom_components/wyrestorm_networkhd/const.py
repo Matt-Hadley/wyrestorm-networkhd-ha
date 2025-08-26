@@ -17,8 +17,12 @@ CONF_UPDATE_INTERVAL = "update_interval"
 # Default values
 DEFAULT_PORT = 10022
 DEFAULT_USERNAME = "wyrestorm"
-DEFAULT_PASSWORD = "networkhd"
+DEFAULT_PASSWORD = "networkhd"  # WARNING: Change default credentials for security
 DEFAULT_UPDATE_INTERVAL = 60  # Default to 60 seconds
+
+# SSH Security Settings
+SSH_CONNECT_TIMEOUT = 10.0
+SSH_HOST_KEY_POLICY = "auto_add"  # Auto-add host keys with warning for usability
 
 
 # Platforms supported by this integration

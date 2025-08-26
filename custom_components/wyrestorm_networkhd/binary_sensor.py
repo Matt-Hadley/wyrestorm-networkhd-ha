@@ -115,7 +115,7 @@ class WyreStormOnlineSensor(CoordinatorEntity[WyreStormCoordinator], BinarySenso
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return extra state attributes."""
+        """Return all available device attributes dynamically."""
         if not self.coordinator.data:
             return {}
             
@@ -123,13 +123,22 @@ class WyreStormOnlineSensor(CoordinatorEntity[WyreStormCoordinator], BinarySenso
         if not device_data:
             return {}
             
+        # Start with base attributes
         attributes = {
             "device_id": self.device_id,
             "device_type": self.device_type,
-            "model": self.device_data.get("model"),
+            "model": self.device_data.get("model", "Unknown"),
         }
         
-            
+        # Add all available device data as attributes, excluding internal/duplicate fields
+        excluded_fields = {"name", "type"}  # Already covered by device_id/device_type
+        
+        for key, value in device_data.items():
+            if key not in excluded_fields and value is not None:
+                # Clean up attribute names for better display
+                clean_key = key.replace("_", " ").title()
+                attributes[clean_key] = value
+                
         return attributes
 
 
@@ -193,7 +202,7 @@ class WyreStormVideoInputSensor(CoordinatorEntity[WyreStormCoordinator], BinaryS
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return extra state attributes."""
+        """Return all available device attributes dynamically."""
         if not self.coordinator.data:
             return {}
             
@@ -201,25 +210,22 @@ class WyreStormVideoInputSensor(CoordinatorEntity[WyreStormCoordinator], BinaryS
         if not device_data:
             return {}
             
+        # Start with base attributes
         attributes = {
             "device_id": self.device_id,
             "device_type": self.device_type,
-            "model": self.device_data.get("model"),
+            "model": self.device_data.get("model", "Unknown"),
         }
         
-        # Add encoder-specific video input details
-        if "hdmi_in_active" in device_data:
-            attributes["hdmi_in_active"] = device_data["hdmi_in_active"]
-        if "resolution" in device_data:
-            attributes["resolution"] = device_data["resolution"]
-        if "hdmi_in_frame_rate" in device_data:
-            attributes["frame_rate"] = device_data["hdmi_in_frame_rate"]
-        if "audio_input_format" in device_data:
-            attributes["audio_format"] = device_data["audio_input_format"]
-        if "hdcp" in device_data:
-            attributes["hdcp"] = device_data["hdcp"]
+        # Add all available device data as attributes, excluding internal/duplicate fields
+        excluded_fields = {"name", "type"}  # Already covered by device_id/device_type
         
-            
+        for key, value in device_data.items():
+            if key not in excluded_fields and value is not None:
+                # Clean up attribute names for better display
+                clean_key = key.replace("_", " ").title()
+                attributes[clean_key] = value
+                
         return attributes
 
 
@@ -283,7 +289,7 @@ class WyreStormVideoOutputSensor(CoordinatorEntity[WyreStormCoordinator], Binary
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return extra state attributes."""
+        """Return all available device attributes dynamically."""
         if not self.coordinator.data:
             return {}
             
@@ -291,25 +297,22 @@ class WyreStormVideoOutputSensor(CoordinatorEntity[WyreStormCoordinator], Binary
         if not device_data:
             return {}
             
+        # Start with base attributes
         attributes = {
             "device_id": self.device_id,
             "device_type": self.device_type,
-            "model": self.device_data.get("model"),
+            "model": self.device_data.get("model", "Unknown"),
         }
         
-        # Add decoder-specific video output details
-        if "hdmi_out_active" in device_data:
-            attributes["hdmi_out_active"] = device_data["hdmi_out_active"]
-        if "hdmi_out_resolution" in device_data:
-            attributes["output_resolution"] = device_data["hdmi_out_resolution"]
-        if "hdmi_out_frame_rate" in device_data:
-            attributes["output_frame_rate"] = device_data["hdmi_out_frame_rate"]
-        if "audio_output_format" in device_data:
-            attributes["audio_output_format"] = device_data["audio_output_format"]
-        if "audio_bitrate" in device_data:
-            attributes["audio_bitrate"] = device_data["audio_bitrate"]
+        # Add all available device data as attributes, excluding internal/duplicate fields
+        excluded_fields = {"name", "type"}  # Already covered by device_id/device_type
         
-            
+        for key, value in device_data.items():
+            if key not in excluded_fields and value is not None:
+                # Clean up attribute names for better display
+                clean_key = key.replace("_", " ").title()
+                attributes[clean_key] = value
+                
         return attributes
 
 
