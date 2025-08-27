@@ -15,7 +15,13 @@ from wyrestorm_networkhd.exceptions import NetworkHDError
 
 from .const import DOMAIN
 from .coordinator import WyreStormCoordinator
-from .device_naming import get_device_display_name
+from ._device_utils import create_device_info, get_device_attributes
+from ._entity_utils import (
+    check_availability,
+    validate_device_for_setup,
+    log_device_setup,
+)
+from ._command_utils import safe_device_command
 
 
 
@@ -33,19 +39,8 @@ async def async_setup_entry(
     
     entities = []
     
-    # Safety checks
-    if not coordinator.is_ready():
-        _LOGGER.warning("Coordinator not ready, skipping select setup")
-        return
-    
-    if coordinator.has_errors():
-        _LOGGER.warning("Coordinator has errors, skipping select setup")
-        return
-    
-    # Get devices data
-    devices_data = coordinator.get_all_devices()
-    if not devices_data:
-        _LOGGER.warning("No devices data available for select setup")
+    devices_data = validate_device_for_setup(coordinator, _LOGGER, "select")
+    if devices_data is None:
         return
     
     # Create source selection entities for decoders only
@@ -77,7 +72,7 @@ class WyreStormSourceSelect(CoordinatorEntity[WyreStormCoordinator], SelectEntit
         self._device_info = device_info
         # Set entity attributes
         self._attr_unique_id = f"{coordinator.host}_{device_id}_matrix_routing"
-        self._attr_name = "Input Source"  # Generic name without device prefix
+        self._attr_name = "Input Source"
         self._attr_icon = "mdi:video-switch"
         self._attr_entity_category = EntityCategory.CONFIG
 
@@ -86,15 +81,13 @@ class WyreStormSourceSelect(CoordinatorEntity[WyreStormCoordinator], SelectEntit
         """Return device information."""
         device_data = self.coordinator.data.get("devices", {}).get(self._device_id, {}) if self.coordinator.data else {}
         model_name = self._device_info.get("model", f"NetworkHD {self._device_info.get('type', 'Device').title()}")
-        device_name = get_device_display_name(self._device_id, self._device_info, device_data)
         
-        return {
-            "identifiers": {(DOMAIN, f"{self.coordinator.host}_{self._device_id}")},
-            "name": device_name,
-            "manufacturer": "WyreStorm",
-            "model": model_name,
-            "via_device": (DOMAIN, self.coordinator.host),
-        }
+        return create_device_info(
+            self.coordinator.host,
+            self._device_id,
+            {"type": self._device_info.get("type", "device"), "model": model_name},
+            device_data
+        )
 
     @property
     def current_option(self) -> str | None:
@@ -131,20 +124,7 @@ class WyreStormSourceSelect(CoordinatorEntity[WyreStormCoordinator], SelectEntit
     @property
     def available(self) -> bool:
         """Return True if the select entity is available."""
-        # Check if coordinator is ready first
-        if not self.coordinator.is_ready():
-            return False
-            
-        # Check if coordinator has errors
-        if self.coordinator.has_errors():
-            return False
-            
-        # For device-specific selects, check device data
-        if not self.coordinator.data:
-            return False
-        
-        device_data = self.coordinator.data.get("devices", {}).get(self._device_id)
-        return device_data.get("online", False)
+        return check_availability(self.coordinator, self._device_id)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -154,29 +134,16 @@ class WyreStormSourceSelect(CoordinatorEntity[WyreStormCoordinator], SelectEntit
         
         device_data = self.coordinator.data.get("devices", {}).get(self._device_id, {})
         
-        # Start with base attributes
-        attributes = {
-            "device_id": self._device_id,
-            "device_type": self._device_info.get("type", "unknown"),
-            "model": self._device_info.get("model", "Unknown"),
-        }
-        
-        # Add all available device data as attributes, excluding internal/duplicate fields
-        excluded_fields = {"name", "type"}  # Already covered by device_id/device_type
-        
-        for key, value in device_data.items():
-            if key not in excluded_fields and value is not None:
-                # Clean up attribute names for better display
-                clean_key = key.replace("_", " ").title()
-                attributes[clean_key] = value
-            
+        attributes = get_device_attributes(
+            self._device_id, self._device_info.get("type", "unknown"), device_data
+        )
+        attributes["model"] = self._device_info.get("model", "Unknown")
         return attributes
 
     async def async_select_option(self, option: str) -> None:
         """Select a new source for the decoder."""
-        try:
-            _LOGGER.info("Setting source for decoder %s to %s", self._device_id, option)
-            
+        @safe_device_command(_LOGGER, self._device_id, f"set source to {option}")
+        async def _set_source():
             if option == "None":
                 # Disconnect the decoder (set to no source)
                 await self.coordinator.api.media_stream_matrix_switch.matrix_set_null([self._device_id])
@@ -185,13 +152,7 @@ class WyreStormSourceSelect(CoordinatorEntity[WyreStormCoordinator], SelectEntit
                 await self.coordinator.api.media_stream_matrix_switch.matrix_set(
                     option, [self._device_id]
                 )
-            
             # Request a refresh to update the state
             await self.coordinator.async_request_refresh()
             
-        except NetworkHDError as err:
-            _LOGGER.error("Failed to set source for %s: %s", self._device_id, err)
-            raise
-        except Exception as err:
-            _LOGGER.error("Unexpected error setting source for %s: %s", self._device_id, err)
-            raise
+        await _set_source()

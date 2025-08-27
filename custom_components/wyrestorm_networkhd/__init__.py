@@ -33,6 +33,7 @@ from .const import (
     SSH_HOST_KEY_POLICY,
 )
 from .coordinator import WyreStormCoordinator
+from ._device_utils import extract_firmware_version
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -107,20 +108,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     firmware_version = "Unknown"
     try:
         version_info = await api.api_query.config_get_version()
-        
-        if hasattr(version_info, 'core_version'):
-            # Version object with core_version attribute
-            firmware_version = version_info.core_version
-        elif hasattr(version_info, 'web_version'):
-            # Fall back to web_version if core_version not available
-            firmware_version = version_info.web_version  
-        elif isinstance(version_info, dict):
-            # Dictionary response structure
-            firmware_version = version_info.get("core_version", 
-                              version_info.get("version", 
-                              version_info.get("firmware", "Unknown")))
-        elif isinstance(version_info, str):
-            firmware_version = version_info
+        firmware_version = extract_firmware_version(version_info)
         _LOGGER.debug("Retrieved firmware version: %s", firmware_version)
     except Exception as err:
         _LOGGER.warning("Failed to get firmware version: %s", err)

@@ -16,7 +16,13 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import WyreStormCoordinator
-from .device_naming import get_device_display_name
+from ._device_utils import create_device_info, get_device_attributes
+from ._entity_utils import (
+    check_availability,
+    validate_device_for_setup,
+    log_device_setup,
+    EntityConfigMixin,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -29,19 +35,12 @@ async def async_setup_entry(
     """Set up WyreStorm NetworkHD binary sensors."""
     coordinator: WyreStormCoordinator = hass.data[DOMAIN][entry.entry_id]
     
-    _LOGGER.info("Setting up WyreStorm NetworkHD binary sensors...")
-    
-    if not coordinator.is_ready():
-        _LOGGER.warning("Coordinator not ready, skipping binary sensor setup")
-        return
-        
-    if coordinator.has_errors():
-        _LOGGER.warning("Coordinator has errors, skipping binary sensor setup")
+    devices_data = validate_device_for_setup(coordinator, _LOGGER, "binary sensor")
+    if devices_data is None:
         return
 
+    log_device_setup(_LOGGER, "binary sensors", devices_data)
     entities = []
-    devices_data = coordinator.data.get("devices", {})
-    _LOGGER.info("Found %d devices for binary sensors", len(devices_data))
     
     for device_id, device_data in devices_data.items():
         device_type = device_data.get("type")
@@ -64,7 +63,7 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-class WyreStormOnlineSensor(CoordinatorEntity[WyreStormCoordinator], BinarySensorEntity):
+class WyreStormOnlineSensor(CoordinatorEntity[WyreStormCoordinator], BinarySensorEntity, EntityConfigMixin):
     """Binary sensor for device online status."""
 
     def __init__(self, coordinator: WyreStormCoordinator, device_id: str, device_data: dict[str, Any]) -> None:
@@ -74,12 +73,12 @@ class WyreStormOnlineSensor(CoordinatorEntity[WyreStormCoordinator], BinarySenso
         self.device_data = device_data
         self.device_type = device_data.get("type", "unknown")
         
-        # Set entity attributes
-        self._attr_unique_id = f"{coordinator.host}_{device_id}_online"
-        self._attr_name = "Controller Link"  # Generic name without device prefix
+        # Set entity configuration using mixin
+        self._set_entity_config(
+            coordinator, device_id, "online", "Controller Link",
+            icon="mdi:ethernet", entity_category=EntityCategory.DIAGNOSTIC
+        )
         self._attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
-        self._attr_entity_category = EntityCategory.DIAGNOSTIC
-        self._attr_icon = "mdi:ethernet"
 
     @property
     def is_on(self) -> bool | None:
@@ -97,29 +96,18 @@ class WyreStormOnlineSensor(CoordinatorEntity[WyreStormCoordinator], BinarySenso
     @property
     def available(self) -> bool:
         """Return True if entity is available."""
-        # Check if coordinator is ready first
-        if not self.coordinator.is_ready():
-            return False
-            
-        # Check if coordinator has errors
-        if self.coordinator.has_errors():
-            return False
-            
-        # Allow brief data gaps during updates - only require data for device-specific checks
-        return True
+        # Allow brief data gaps for online sensors - they show controller connectivity
+        return check_availability(self.coordinator)
 
     @property
     def device_info(self) -> DeviceInfo:
         """Return device info."""
         device_data = self.coordinator.data.get("devices", {}).get(self.device_id, {}) if self.coordinator.data else {}
-        device_name = get_device_display_name(self.device_id, {"type": self.device_type}, device_data)
-        
-        return DeviceInfo(
-            identifiers={(DOMAIN, f"{self.coordinator.host}_{self.device_id}")},
-            name=device_name,
-            manufacturer="WyreStorm",
-            model=self.device_data.get("model", "NetworkHD Device"),
-            via_device=(DOMAIN, self.coordinator.host),
+        return create_device_info(
+            self.coordinator.host,
+            self.device_id,
+            {"type": self.device_type, "model": self.device_data.get("model", "NetworkHD Device")},
+            device_data
         )
 
     @property
@@ -132,26 +120,12 @@ class WyreStormOnlineSensor(CoordinatorEntity[WyreStormCoordinator], BinarySenso
         if not device_data:
             return {}
             
-        # Start with base attributes
-        attributes = {
-            "device_id": self.device_id,
-            "device_type": self.device_type,
-            "model": self.device_data.get("model", "Unknown"),
-        }
-        
-        # Add all available device data as attributes, excluding internal/duplicate fields
-        excluded_fields = {"name", "type"}  # Already covered by device_id/device_type
-        
-        for key, value in device_data.items():
-            if key not in excluded_fields and value is not None:
-                # Clean up attribute names for better display
-                clean_key = key.replace("_", " ").title()
-                attributes[clean_key] = value
-                
+        attributes = get_device_attributes(self.device_id, self.device_type, device_data)
+        attributes["model"] = self.device_data.get("model", "Unknown")
         return attributes
 
 
-class WyreStormVideoInputSensor(CoordinatorEntity[WyreStormCoordinator], BinarySensorEntity):
+class WyreStormVideoInputSensor(CoordinatorEntity[WyreStormCoordinator], BinarySensorEntity, EntityConfigMixin):
     """Binary sensor for encoder video input status."""
 
     def __init__(self, coordinator: WyreStormCoordinator, device_id: str, device_data: dict[str, Any]) -> None:
@@ -161,11 +135,11 @@ class WyreStormVideoInputSensor(CoordinatorEntity[WyreStormCoordinator], BinaryS
         self.device_data = device_data
         self.device_type = device_data.get("type", "unknown")
         
-        # Set entity attributes
-        self._attr_unique_id = f"{coordinator.host}_{device_id}_video_input"
-        self._attr_name = "Video Input"  # Generic name without device prefix
+        # Set entity configuration using mixin
+        self._set_entity_config(
+            coordinator, device_id, "video_input", "Video Input", icon="mdi:arrow-left"
+        )
         self._attr_device_class = BinarySensorDeviceClass.RUNNING
-        self._attr_icon = "mdi:arrow-left"  # Left arrow for input
 
     @property
     def is_on(self) -> bool | None:
@@ -185,37 +159,17 @@ class WyreStormVideoInputSensor(CoordinatorEntity[WyreStormCoordinator], BinaryS
     @property
     def available(self) -> bool:
         """Return True if entity is available."""
-        # Check if coordinator is ready first
-        if not self.coordinator.is_ready():
-            return False
-            
-        # Check if coordinator has errors
-        if self.coordinator.has_errors():
-            return False
-            
-        # For device-specific sensors, check device data
-        if not self.coordinator.data:
-            return False
-            
-        device_data = self.coordinator.data.get("devices", {}).get(self.device_id)
-        if not device_data:
-            return False
-            
-        # Device is available if it's online (controller link)
-        return device_data.get("online", False)
+        return check_availability(self.coordinator, self.device_id)
 
     @property
     def device_info(self) -> DeviceInfo:
         """Return device info."""
         device_data = self.coordinator.data.get("devices", {}).get(self.device_id, {}) if self.coordinator.data else {}
-        device_name = get_device_display_name(self.device_id, {"type": "encoder"}, device_data)
-        
-        return DeviceInfo(
-            identifiers={(DOMAIN, f"{self.coordinator.host}_{self.device_id}")},
-            name=device_name,
-            manufacturer="WyreStorm",
-            model=self.device_data.get("model", "NetworkHD Encoder"),
-            via_device=(DOMAIN, self.coordinator.host),
+        return create_device_info(
+            self.coordinator.host,
+            self.device_id,
+            {"type": "encoder", "model": self.device_data.get("model", "NetworkHD Encoder")},
+            device_data
         )
 
     @property
@@ -228,26 +182,12 @@ class WyreStormVideoInputSensor(CoordinatorEntity[WyreStormCoordinator], BinaryS
         if not device_data:
             return {}
             
-        # Start with base attributes
-        attributes = {
-            "device_id": self.device_id,
-            "device_type": self.device_type,
-            "model": self.device_data.get("model", "Unknown"),
-        }
-        
-        # Add all available device data as attributes, excluding internal/duplicate fields
-        excluded_fields = {"name", "type"}  # Already covered by device_id/device_type
-        
-        for key, value in device_data.items():
-            if key not in excluded_fields and value is not None:
-                # Clean up attribute names for better display
-                clean_key = key.replace("_", " ").title()
-                attributes[clean_key] = value
-                
+        attributes = get_device_attributes(self.device_id, self.device_type, device_data)
+        attributes["model"] = self.device_data.get("model", "Unknown")
         return attributes
 
 
-class WyreStormVideoOutputSensor(CoordinatorEntity[WyreStormCoordinator], BinarySensorEntity):
+class WyreStormVideoOutputSensor(CoordinatorEntity[WyreStormCoordinator], BinarySensorEntity, EntityConfigMixin):
     """Binary sensor for decoder video output status."""
 
     def __init__(self, coordinator: WyreStormCoordinator, device_id: str, device_data: dict[str, Any]) -> None:
@@ -257,11 +197,11 @@ class WyreStormVideoOutputSensor(CoordinatorEntity[WyreStormCoordinator], Binary
         self.device_data = device_data
         self.device_type = device_data.get("type", "unknown")
         
-        # Set entity attributes
-        self._attr_unique_id = f"{coordinator.host}_{device_id}_video_output"
-        self._attr_name = "Video Output"  # Generic name without device prefix
+        # Set entity configuration using mixin
+        self._set_entity_config(
+            coordinator, device_id, "video_output", "Video Output", icon="mdi:arrow-right"
+        )
         self._attr_device_class = BinarySensorDeviceClass.RUNNING
-        self._attr_icon = "mdi:arrow-right"  # Right arrow for output
 
     @property
     def is_on(self) -> bool | None:
@@ -281,37 +221,17 @@ class WyreStormVideoOutputSensor(CoordinatorEntity[WyreStormCoordinator], Binary
     @property
     def available(self) -> bool:
         """Return True if entity is available."""
-        # Check if coordinator is ready first
-        if not self.coordinator.is_ready():
-            return False
-            
-        # Check if coordinator has errors
-        if self.coordinator.has_errors():
-            return False
-            
-        # For device-specific sensors, check device data
-        if not self.coordinator.data:
-            return False
-            
-        device_data = self.coordinator.data.get("devices", {}).get(self.device_id)
-        if not device_data:
-            return False
-            
-        # Device is available if it's online (controller link)
-        return device_data.get("online", False)
+        return check_availability(self.coordinator, self.device_id)
 
     @property
     def device_info(self) -> DeviceInfo:
         """Return device info."""
         device_data = self.coordinator.data.get("devices", {}).get(self.device_id, {}) if self.coordinator.data else {}
-        device_name = get_device_display_name(self.device_id, {"type": "decoder"}, device_data)
-        
-        return DeviceInfo(
-            identifiers={(DOMAIN, f"{self.coordinator.host}_{self.device_id}")},
-            name=device_name,
-            manufacturer="WyreStorm",
-            model=self.device_data.get("model", "NetworkHD Decoder"),
-            via_device=(DOMAIN, self.coordinator.host),
+        return create_device_info(
+            self.coordinator.host,
+            self.device_id,
+            {"type": "decoder", "model": self.device_data.get("model", "NetworkHD Decoder")},
+            device_data
         )
 
     @property
@@ -324,22 +244,8 @@ class WyreStormVideoOutputSensor(CoordinatorEntity[WyreStormCoordinator], Binary
         if not device_data:
             return {}
             
-        # Start with base attributes
-        attributes = {
-            "device_id": self.device_id,
-            "device_type": self.device_type,
-            "model": self.device_data.get("model", "Unknown"),
-        }
-        
-        # Add all available device data as attributes, excluding internal/duplicate fields
-        excluded_fields = {"name", "type"}  # Already covered by device_id/device_type
-        
-        for key, value in device_data.items():
-            if key not in excluded_fields and value is not None:
-                # Clean up attribute names for better display
-                clean_key = key.replace("_", " ").title()
-                attributes[clean_key] = value
-                
+        attributes = get_device_attributes(self.device_id, self.device_type, device_data)
+        attributes["model"] = self.device_data.get("model", "Unknown")
         return attributes
 
 

@@ -14,7 +14,13 @@ from wyrestorm_networkhd.exceptions import NetworkHDError
 
 from .const import DOMAIN
 from .coordinator import WyreStormCoordinator
-from .device_naming import get_device_display_name
+from ._device_utils import create_device_info
+from ._entity_utils import (
+    check_availability,
+    validate_device_for_setup,
+    log_device_setup,
+)
+from ._command_utils import safe_device_command
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -27,19 +33,12 @@ async def async_setup_entry(
     """Set up WyreStorm NetworkHD button entities."""
     coordinator: WyreStormCoordinator = hass.data[DOMAIN][entry.entry_id]
     
-    _LOGGER.info("Setting up WyreStorm NetworkHD button entities...")
-    
-    if not coordinator.is_ready():
-        _LOGGER.warning("Coordinator not ready, skipping button setup")
-        return
-        
-    if coordinator.has_errors():
-        _LOGGER.warning("Coordinator has errors, skipping button setup")
+    devices_data = validate_device_for_setup(coordinator, _LOGGER, "button")
+    if devices_data is None:
         return
 
+    log_device_setup(_LOGGER, "button entities", devices_data)
     entities = []
-    devices_data = coordinator.data.get("devices", {})
-    _LOGGER.info("Found %d devices for button entities", len(devices_data))
     
     # Add reboot button for the controller
     entities.append(WyreStormRebootButton(coordinator))
@@ -75,43 +74,21 @@ class WyreStormRebootButton(ButtonEntity):
     @property
     def available(self) -> bool:
         """Return True if entity is available."""
-        # Check if coordinator is ready first
-        if not self.coordinator.is_ready():
-            return False
-            
-        # Check if coordinator has errors
-        if self.coordinator.has_errors():
-            return False
-            
-        # For controller-level buttons (like reboot), just check coordinator readiness
-        return True
+        # Controller-level buttons need only coordinator availability
+        return check_availability(self.coordinator)
 
     @property
     def device_info(self) -> DeviceInfo:
         """Return device info."""
-        return DeviceInfo(
-            identifiers={(DOMAIN, self.coordinator.host)},
-            name=f"Controller - {self.coordinator.host}",
-            manufacturer="WyreStorm",
-            model="NetworkHD Controller",
-            via_device=None,  # This is the controller device itself
+        return create_device_info(
+            self.coordinator.host, "", {}, {}, is_controller=True
         )
 
+    @safe_device_command(_LOGGER, "controller", "reboot")
     async def async_press(self) -> None:
         """Handle the button press - send reboot command to controller."""
-        try:
-            _LOGGER.info("Sending reboot command to controller at %s", self.coordinator.host)
-            await self.coordinator.api.reboot_reset.set_reboot()
-            _LOGGER.info("Reboot command sent successfully to controller at %s", self.coordinator.host)
-            
-            # Note: We don't refresh the coordinator here since the controller will be rebooting
-            # and won't be available for a while
-        except NetworkHDError as err:
-            _LOGGER.error("Failed to send reboot command to controller at %s: %s", self.coordinator.host, err)
-            raise
-        except Exception as err:
-            _LOGGER.error("Unexpected error sending reboot command to controller at %s: %s", self.coordinator.host, err)
-            raise
+        await self.coordinator.api.reboot_reset.set_reboot()
+        # Note: We don't refresh the coordinator here since the controller will be rebooting
 
 
 class WyreStormSinkPowerOnButton(ButtonEntity):
@@ -142,48 +119,30 @@ class WyreStormSinkPowerOnButton(ButtonEntity):
         if self.coordinator.has_errors():
             return False
             
-        # For device-specific buttons, check device data
-        if not self.coordinator.data:
-            return False
-            
-        device_data = self.coordinator.data.get("devices", {}).get(self.device_id)
-        if not device_data:
-            return False
-            
-        # Device must be online to receive commands
-        return device_data.get("online", False)
+        # Device-specific buttons need device to be online
+        return check_availability(self.coordinator, self.device_id)
 
     @property
     def device_info(self) -> DeviceInfo:
         """Return device info."""
         device_data = self.coordinator.data.get("devices", {}).get(self.device_id, {}) if self.coordinator.data else {}
-        device_name = get_device_display_name(self.device_id, {"type": "decoder"}, device_data)
-        
-        return DeviceInfo(
-            identifiers={(DOMAIN, f"{self.coordinator.host}_{self.device_id}")},
-            name=device_name,
-            manufacturer="WyreStorm",
-            model=self.device_data.get("model", "NetworkHD Decoder"),
-            via_device=(DOMAIN, self.coordinator.host),
+        return create_device_info(
+            self.coordinator.host,
+            self.device_id,
+            {"type": "decoder", "model": self.device_data.get("model", "NetworkHD Decoder")},
+            device_data
         )
 
     async def async_press(self) -> None:
         """Handle the button press - send sink power on command."""
-        try:
-            _LOGGER.info("Sending sink power on command to %s", self.device_id)
+        @safe_device_command(_LOGGER, self.device_id, "sink power on")
+        async def _send_command():
             await self.coordinator.api.connected_device_control.config_set_device_sinkpower(
-                power="on",
-                rx=self.device_id
+                power="on", rx=self.device_id
             )
-            # Trigger a coordinator refresh to update states
             await self.coordinator.async_request_refresh()
-            _LOGGER.info("Sink power on command sent successfully to %s", self.device_id)
-        except NetworkHDError as err:
-            _LOGGER.error("Failed to send sink power on command to %s: %s", self.device_id, err)
-            raise
-        except Exception as err:
-            _LOGGER.error("Unexpected error sending sink power on command to %s: %s", self.device_id, err)
-            raise
+        
+        await _send_command()
 
 
 class WyreStormSinkPowerOffButton(ButtonEntity):
@@ -214,45 +173,27 @@ class WyreStormSinkPowerOffButton(ButtonEntity):
         if self.coordinator.has_errors():
             return False
             
-        # For device-specific buttons, check device data
-        if not self.coordinator.data:
-            return False
-            
-        device_data = self.coordinator.data.get("devices", {}).get(self.device_id)
-        if not device_data:
-            return False
-            
-        # Device must be online to receive commands
-        return device_data.get("online", False)
+        # Device-specific buttons need device to be online
+        return check_availability(self.coordinator, self.device_id)
 
     @property
     def device_info(self) -> DeviceInfo:
         """Return device info."""
         device_data = self.coordinator.data.get("devices", {}).get(self.device_id, {}) if self.coordinator.data else {}
-        device_name = get_device_display_name(self.device_id, {"type": "decoder"}, device_data)
-        
-        return DeviceInfo(
-            identifiers={(DOMAIN, f"{self.coordinator.host}_{self.device_id}")},
-            name=device_name,
-            manufacturer="WyreStorm",
-            model=self.device_data.get("model", "NetworkHD Decoder"),
-            via_device=(DOMAIN, self.coordinator.host),
+        return create_device_info(
+            self.coordinator.host,
+            self.device_id,
+            {"type": "decoder", "model": self.device_data.get("model", "NetworkHD Decoder")},
+            device_data
         )
 
     async def async_press(self) -> None:
         """Handle the button press - send sink power off command."""
-        try:
-            _LOGGER.info("Sending sink power off command to %s", self.device_id)
+        @safe_device_command(_LOGGER, self.device_id, "sink power off")
+        async def _send_command():
             await self.coordinator.api.connected_device_control.config_set_device_sinkpower(
-                power="off",
-                rx=self.device_id
+                power="off", rx=self.device_id
             )
-            # Trigger a coordinator refresh to update states
             await self.coordinator.async_request_refresh()
-            _LOGGER.info("Sink power off command sent successfully to %s", self.device_id)
-        except NetworkHDError as err:
-            _LOGGER.error("Failed to send sink power off command to %s: %s", self.device_id, err)
-            raise
-        except Exception as err:
-            _LOGGER.error("Unexpected error sending sink power off command to %s: %s", self.device_id, err)
-            raise
+        
+        await _send_command()
