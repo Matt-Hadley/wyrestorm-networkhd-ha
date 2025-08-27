@@ -41,6 +41,9 @@ async def async_setup_entry(
     devices_data = coordinator.data.get("devices", {})
     _LOGGER.info("Found %d devices for button entities", len(devices_data))
     
+    # Add reboot button for the controller
+    entities.append(WyreStormRebootButton(coordinator))
+    
     for device_id, device_data in devices_data.items():
         device_type = device_data.get("type")
         _LOGGER.debug("Processing device %s (type: %s)", device_id, device_type)
@@ -53,6 +56,53 @@ async def async_setup_entry(
 
     _LOGGER.info("Created %d button entities", len(entities))
     async_add_entities(entities)
+
+
+class WyreStormRebootButton(ButtonEntity):
+    """Button to reboot the WyreStorm NetworkHD controller."""
+
+    def __init__(self, coordinator: WyreStormCoordinator) -> None:
+        """Initialize the reboot button."""
+        super().__init__()
+        self.coordinator = coordinator
+        
+        # Set entity attributes
+        self._attr_unique_id = f"{coordinator.host}_controller_reboot"
+        self._attr_name = "Reboot Controller"
+        self._attr_icon = "mdi:restart"
+        self._attr_entity_category = EntityCategory.CONFIG
+
+    @property
+    def available(self) -> bool:
+        """Return True if entity is available."""
+        return self.coordinator.is_ready() and not self.coordinator.has_errors()
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return device info."""
+        return DeviceInfo(
+            identifiers={(DOMAIN, self.coordinator.host)},
+            name=f"Controller - {self.coordinator.host}",
+            manufacturer="WyreStorm",
+            model="NetworkHD Controller",
+            via_device=None,  # This is the controller device itself
+        )
+
+    async def async_press(self) -> None:
+        """Handle the button press - send reboot command to controller."""
+        try:
+            _LOGGER.info("Sending reboot command to controller at %s", self.coordinator.host)
+            await self.coordinator.api.reboot_reset.set_reboot()
+            _LOGGER.info("Reboot command sent successfully to controller at %s", self.coordinator.host)
+            
+            # Note: We don't refresh the coordinator here since the controller will be rebooting
+            # and won't be available for a while
+        except NetworkHDError as err:
+            _LOGGER.error("Failed to send reboot command to controller at %s: %s", self.coordinator.host, err)
+            raise
+        except Exception as err:
+            _LOGGER.error("Unexpected error sending reboot command to controller at %s: %s", self.coordinator.host, err)
+            raise
 
 
 class WyreStormSinkPowerOnButton(ButtonEntity):
