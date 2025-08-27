@@ -131,10 +131,19 @@ class WyreStormSourceSelect(CoordinatorEntity[WyreStormCoordinator], SelectEntit
     @property
     def available(self) -> bool:
         """Return True if the select entity is available."""
+        # Check if coordinator is ready first
+        if not self.coordinator.is_ready():
+            return False
+            
+        # Check if coordinator has errors
+        if self.coordinator.has_errors():
+            return False
+            
+        # For device-specific selects, check device data
         if not self.coordinator.data:
             return False
         
-        device_data = self.coordinator.data.get("devices", {}).get(self._device_id, {})
+        device_data = self.coordinator.data.get("devices", {}).get(self._device_id)
         return device_data.get("online", False)
 
     @property

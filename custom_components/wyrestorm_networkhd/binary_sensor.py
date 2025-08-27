@@ -97,7 +97,16 @@ class WyreStormOnlineSensor(CoordinatorEntity[WyreStormCoordinator], BinarySenso
     @property
     def available(self) -> bool:
         """Return True if entity is available."""
-        return self.coordinator.data is not None
+        # Check if coordinator is ready first
+        if not self.coordinator.is_ready():
+            return False
+            
+        # Check if coordinator has errors
+        if self.coordinator.has_errors():
+            return False
+            
+        # Allow brief data gaps during updates - only require data for device-specific checks
+        return True
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -176,6 +185,15 @@ class WyreStormVideoInputSensor(CoordinatorEntity[WyreStormCoordinator], BinaryS
     @property
     def available(self) -> bool:
         """Return True if entity is available."""
+        # Check if coordinator is ready first
+        if not self.coordinator.is_ready():
+            return False
+            
+        # Check if coordinator has errors
+        if self.coordinator.has_errors():
+            return False
+            
+        # For device-specific sensors, check device data
         if not self.coordinator.data:
             return False
             
@@ -263,6 +281,15 @@ class WyreStormVideoOutputSensor(CoordinatorEntity[WyreStormCoordinator], Binary
     @property
     def available(self) -> bool:
         """Return True if entity is available."""
+        # Check if coordinator is ready first
+        if not self.coordinator.is_ready():
+            return False
+            
+        # Check if coordinator has errors
+        if self.coordinator.has_errors():
+            return False
+            
+        # For device-specific sensors, check device data
         if not self.coordinator.data:
             return False
             

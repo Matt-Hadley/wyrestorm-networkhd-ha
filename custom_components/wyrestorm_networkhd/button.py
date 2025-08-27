@@ -75,7 +75,16 @@ class WyreStormRebootButton(ButtonEntity):
     @property
     def available(self) -> bool:
         """Return True if entity is available."""
-        return self.coordinator.is_ready() and not self.coordinator.has_errors()
+        # Check if coordinator is ready first
+        if not self.coordinator.is_ready():
+            return False
+            
+        # Check if coordinator has errors
+        if self.coordinator.has_errors():
+            return False
+            
+        # For controller-level buttons (like reboot), just check coordinator readiness
+        return True
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -125,6 +134,15 @@ class WyreStormSinkPowerOnButton(ButtonEntity):
     @property
     def available(self) -> bool:
         """Return True if entity is available."""
+        # Check if coordinator is ready first
+        if not self.coordinator.is_ready():
+            return False
+            
+        # Check if coordinator has errors
+        if self.coordinator.has_errors():
+            return False
+            
+        # For device-specific buttons, check device data
         if not self.coordinator.data:
             return False
             
@@ -132,7 +150,7 @@ class WyreStormSinkPowerOnButton(ButtonEntity):
         if not device_data:
             return False
             
-        # Device must be online to receive sink power commands
+        # Device must be online to receive commands
         return device_data.get("online", False)
 
     @property
@@ -188,6 +206,15 @@ class WyreStormSinkPowerOffButton(ButtonEntity):
     @property
     def available(self) -> bool:
         """Return True if entity is available."""
+        # Check if coordinator is ready first
+        if not self.coordinator.is_ready():
+            return False
+            
+        # Check if coordinator has errors
+        if self.coordinator.has_errors():
+            return False
+            
+        # For device-specific buttons, check device data
         if not self.coordinator.data:
             return False
             
@@ -195,7 +222,7 @@ class WyreStormSinkPowerOffButton(ButtonEntity):
         if not device_data:
             return False
             
-        # Device must be online to receive sink power commands
+        # Device must be online to receive commands
         return device_data.get("online", False)
 
     @property
