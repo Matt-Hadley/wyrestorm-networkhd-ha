@@ -33,7 +33,16 @@ class TestAsyncSetupEntry(AsyncSetupTestBase):
     @pytest.mark.asyncio
     async def test_setup_no_devices(self, mock_hass, mock_config_entry, mock_binary_sensor_coordinator):
         """Test setup with no devices."""
-        mock_binary_sensor_coordinator.data = {"devices": {}}
+        from custom_components.wyrestorm_networkhd.coordinator import CoordinatorData, DeviceCollection
+
+        # Create empty coordinator data
+        empty_devices = DeviceCollection()
+        mock_binary_sensor_coordinator.data = CoordinatorData(
+            devices=empty_devices, matrix={}, device_status=[], device_info=[]
+        )
+        mock_binary_sensor_coordinator.get_all_devices.return_value = empty_devices
+        mock_binary_sensor_coordinator.is_ready.return_value = True
+
         mock_hass.data = {DOMAIN: {mock_config_entry.entry_id: mock_binary_sensor_coordinator}}
         mock_add_entities = Mock()
 

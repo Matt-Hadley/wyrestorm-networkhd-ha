@@ -61,13 +61,22 @@ def mock_binary_sensor_coordinator():
 
     # Create mock device objects for new structure
     encoder_device_json = MockDeviceJsonString(
-        trueName="encoder1", deviceType="transmitter", online=True, resolution="1080p"
+        trueName="encoder1",
+        deviceType="transmitter",
+        online=True,
+        resolution="1080p",
+        device_id="encoder1",
+        device_type="encoder",
     )
-    encoder_device_status = MockDeviceStatus(name="encoder1", hdmi_in_active=True)
+    encoder_device_status = MockDeviceStatus(name="encoder1", hdmi_in_active=True, ip_address="192.168.1.100")
     encoder_device_info = MockDeviceInfo(name="encoder1", model="NHD-TX", ip_address="192.168.1.100")
 
-    decoder_device_json = MockDeviceJsonString(trueName="decoder1", deviceType="receiver", online=True)
-    decoder_device_status = MockDeviceStatus(name="decoder1", hdmi_out_active=True, hdmi_out_resolution="1080p")
+    decoder_device_json = MockDeviceJsonString(
+        trueName="decoder1", deviceType="receiver", online=True, device_id="decoder1", device_type="decoder"
+    )
+    decoder_device_status = MockDeviceStatus(
+        name="decoder1", hdmi_out_active=True, hdmi_out_resolution="1080p", ip_address="192.168.1.101"
+    )
     decoder_device_info = MockDeviceInfo(name="decoder1", model="NHD-RX", ip_address="192.168.1.101")
 
     # Create device collection with new structure

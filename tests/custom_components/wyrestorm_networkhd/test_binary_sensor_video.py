@@ -47,13 +47,13 @@ class TestWyreStormVideoInputSensor(BinarySensorTestBase):
                 "encoder1": {}  # No hdmi_in_active key
             }
         }
-        # Should return None when device data exists but hdmi_in_active is missing
-        mock_binary_sensor_coordinator.data = coordinator_data
-        assert video_input_sensor.is_on is None
+        # Should return False when device data exists but hdmi_in_active is missing
+        self.assert_sensor_state(video_input_sensor, expected_state=False, coordinator_data=coordinator_data)
 
     def test_is_on_no_coordinator_data(self, video_input_sensor, mock_binary_sensor_coordinator):
         """Test is_on when coordinator has no data."""
         mock_binary_sensor_coordinator.data = None
+        mock_binary_sensor_coordinator.is_ready.return_value = False
         assert video_input_sensor.is_on is None
 
     def test_device_info(self, video_input_sensor):
@@ -129,9 +129,8 @@ class TestWyreStormVideoOutputSensor(BinarySensorTestBase):
                 "decoder1": {}  # No hdmi_out_active key
             }
         }
-        # Should return None when device data exists but hdmi_out_active is missing
-        mock_binary_sensor_coordinator.data = coordinator_data
-        assert video_output_sensor.is_on is None
+        # Should return False when device data exists but hdmi_out_active is missing
+        self.assert_sensor_state(video_output_sensor, expected_state=False, coordinator_data=coordinator_data)
 
     def test_device_info(self, video_output_sensor):
         """Test device info generation."""

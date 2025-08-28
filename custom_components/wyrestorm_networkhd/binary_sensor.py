@@ -34,8 +34,8 @@ async def async_setup_entry(
     """Set up WyreStorm NetworkHD binary sensors."""
     coordinator: WyreStormCoordinator = hass.data[DOMAIN][entry.entry_id]
 
-    if not coordinator.is_ready():
-        _LOGGER.warning("Coordinator data not ready for binary sensor setup")
+    if not coordinator.is_ready() or coordinator.has_errors():
+        _LOGGER.warning("Coordinator data not ready or has errors for binary sensor setup")
         return
 
     devices = coordinator.get_all_devices()

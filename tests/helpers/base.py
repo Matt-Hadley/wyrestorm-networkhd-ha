@@ -239,14 +239,43 @@ class BinarySensorTestBase(EntityTestBase, DeviceSpecificAvailabilityTestMixin):
     def assert_sensor_state(self, sensor, expected_state: bool, coordinator_data: dict = None):
         """Assert sensor state with optional coordinator data."""
         if coordinator_data:
-            sensor.coordinator.data = coordinator_data
+            # Handle the new CoordinatorData structure
+            from custom_components.wyrestorm_networkhd.coordinator import (
+                CoordinatorData,
+                DeviceCollection,
+                MergedDeviceData,
+            )
+            from tests.helpers.mocks import MockDeviceJsonString
+
+            if isinstance(coordinator_data, dict) and "devices" in coordinator_data:
+                # Create proper CoordinatorData from dict
+                devices = DeviceCollection()
+                for device_id, device_dict in coordinator_data["devices"].items():
+                    # Create mock device
+                    device_json = MockDeviceJsonString(
+                        trueName=device_id,
+                        online=device_dict.get("online", False),
+                        deviceType="transmitter" if device_dict.get("type") == "encoder" else "receiver",
+                    )
+                    device = MergedDeviceData(device_id, None, device_json, None)
+                    device.online = device_dict.get("online", False)
+                    device.hdmi_in_active = device_dict.get("hdmi_in_active", False)
+                    device.hdmi_out_active = device_dict.get("hdmi_out_active", False)
+                    devices.add_device(device)
+
+                sensor.coordinator.data = CoordinatorData(devices=devices, matrix={}, device_status=[], device_info=[])
+                # Update the get_device_info mock
+                sensor.coordinator.get_device_info = lambda device_id: devices.get_device(device_id)
+            else:
+                sensor.coordinator.data = coordinator_data
         assert sensor.is_on == expected_state
 
     def assert_sensor_attributes(self, sensor, expected_attributes: dict):
         """Assert sensor extra state attributes."""
         attributes = sensor.extra_state_attributes
         for key, expected_value in expected_attributes.items():
-            assert attributes.get(key) == expected_value
+            actual_value = attributes.get(key)
+            assert actual_value == expected_value, f"Key '{key}': expected {expected_value}, got {actual_value}"
 
 
 class SelectTestBase(EntityTestBase, DeviceSpecificAvailabilityTestMixin):

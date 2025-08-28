@@ -40,6 +40,7 @@ class TestWyreStormOnlineSensor(BinarySensorTestBase):
     def test_is_on_no_coordinator_data(self, online_sensor, mock_binary_sensor_coordinator):
         """Test is_on when coordinator has no data."""
         mock_binary_sensor_coordinator.data = None
+        mock_binary_sensor_coordinator.is_ready.return_value = False
         assert online_sensor.is_on is None
 
     def test_device_info(self, online_sensor):
@@ -69,6 +70,7 @@ class TestWyreStormOnlineSensor(BinarySensorTestBase):
     def test_extra_state_attributes_no_data(self, online_sensor, mock_binary_sensor_coordinator):
         """Test extra state attributes when no coordinator data."""
         mock_binary_sensor_coordinator.data = None
+        mock_binary_sensor_coordinator.is_ready.return_value = False
         attrs = online_sensor.extra_state_attributes
         assert attrs == {}
 
