@@ -19,8 +19,6 @@ from ._device_utils import create_device_info, get_device_attributes
 from ._entity_utils import (
     EntityConfigMixin,
     check_availability,
-    log_device_setup,
-    validate_device_for_setup,
 )
 from .const import DOMAIN
 from .coordinator import WyreStormCoordinator
@@ -36,27 +34,41 @@ async def async_setup_entry(
     """Set up WyreStorm NetworkHD binary sensors."""
     coordinator: WyreStormCoordinator = hass.data[DOMAIN][entry.entry_id]
 
-    devices_data = validate_device_for_setup(coordinator, _LOGGER, "binary sensor")
-    if devices_data is None:
+    if not coordinator.is_ready():
+        _LOGGER.warning("Coordinator data not ready for binary sensor setup")
         return
 
-    log_device_setup(_LOGGER, "binary sensors", devices_data)
+    devices = coordinator.get_all_devices()
+    if not devices:
+        _LOGGER.warning("No devices available for binary sensor setup")
+        return
+
+    _LOGGER.debug("Setting up binary sensors for %d devices", len(devices))
     entities = []
 
-    for device_id, device_data in devices_data.items():
-        device_type = device_data.get("type")
+    for device_id in devices:
+        device_data = devices.get_device(device_id)
+        if not device_data or not device_data.device_json:
+            continue
+
+        device_type = getattr(device_data.device_json, "deviceType", "unknown")
         _LOGGER.debug("Processing device %s (type: %s)", device_id, device_type)
 
-        if device_type == "decoder":
+        # Create dict for backward compatibility with existing sensors
+        compat_data = {
+            "type": "decoder" if device_type == "receiver" else "encoder" if device_type == "transmitter" else "unknown"
+        }
+
+        if device_type == "receiver":
             # For decoders: online status and video output status
             _LOGGER.debug("Creating decoder sensors for %s", device_id)
-            entities.append(WyreStormOnlineSensor(coordinator, device_id, device_data))
-            entities.append(WyreStormVideoOutputSensor(coordinator, device_id, device_data))
-        elif device_type == "encoder":
+            entities.append(WyreStormOnlineSensor(coordinator, device_id, compat_data))
+            entities.append(WyreStormVideoOutputSensor(coordinator, device_id, compat_data))
+        elif device_type == "transmitter":
             # For encoders: online status and video input status
             _LOGGER.debug("Creating encoder sensors for %s", device_id)
-            entities.append(WyreStormOnlineSensor(coordinator, device_id, device_data))
-            entities.append(WyreStormVideoInputSensor(coordinator, device_id, device_data))
+            entities.append(WyreStormOnlineSensor(coordinator, device_id, compat_data))
+            entities.append(WyreStormVideoInputSensor(coordinator, device_id, compat_data))
         else:
             _LOGGER.warning("Unknown device type for %s: %s", device_id, device_type)
 
@@ -93,27 +105,32 @@ class WyreStormOnlineSensor(CoordinatorEntity[WyreStormCoordinator], BinarySenso
     @property
     def is_on(self) -> bool | None:
         """Return true if the device is online."""
-        if not self.coordinator.data:
+        if not self.coordinator.is_ready():
             return None
 
-        device_data = self.coordinator.data.get("devices", {}).get(self.device_id)
-        if not device_data:
+        device = self.coordinator.get_device_info(self.device_id)
+        if not device:
             return None
 
-        # Return the actual online status from the device JSON data
-        online_status = device_data.get("online", False)
-        return bool(online_status) if online_status is not None else False
+        # Return the actual online status from the merged device data
+        return device.online
 
     @property
     def available(self) -> bool:
         """Return True if entity is available."""
-        # Allow brief data gaps for online sensors - they show controller connectivity
-        return check_availability(self.coordinator)
+        return check_availability(self.coordinator, self.device_id)
 
     @property
     def device_info(self) -> DeviceInfo:
         """Return device info."""
-        device_data = self.coordinator.data.get("devices", {}).get(self.device_id, {}) if self.coordinator.data else {}
+        device = self.coordinator.get_device_info(self.device_id) if self.coordinator.is_ready() else None
+        device_attrs = {}
+        if device and device.device_json:
+            device_attrs = {
+                attr: getattr(device.device_json, attr, None)
+                for attr in dir(device.device_json)
+                if not attr.startswith("_")
+            }
         return create_device_info(
             self.coordinator.host,
             self.device_id,
@@ -121,20 +138,39 @@ class WyreStormOnlineSensor(CoordinatorEntity[WyreStormCoordinator], BinarySenso
                 "type": self.device_type,
                 "model": self.device_data.get("model", "NetworkHD Device"),
             },
-            device_data,
+            device_attrs,
         )
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return all available device attributes dynamically."""
-        if not self.coordinator.data:
+        if not self.coordinator.is_ready():
             return {}
 
-        device_data = self.coordinator.data.get("devices", {}).get(self.device_id)
-        if not device_data:
+        device = self.coordinator.get_device_info(self.device_id)
+        if not device:
             return {}
 
-        attributes = get_device_attributes(self.device_id, self.device_type, device_data)
+        # Build attributes dict from device data sources
+        device_attrs = {}
+        if device.device_json:
+            device_attrs.update(
+                {
+                    attr: getattr(device.device_json, attr, None)
+                    for attr in dir(device.device_json)
+                    if not attr.startswith("_")
+                }
+            )
+        if device.device_status:
+            device_attrs.update(
+                {
+                    attr: getattr(device.device_status, attr, None)
+                    for attr in dir(device.device_status)
+                    if not attr.startswith("_")
+                }
+            )
+
+        attributes = get_device_attributes(self.device_id, self.device_type, device_attrs)
         attributes["model"] = self.device_data.get("model", "Unknown")
         return attributes
 
@@ -161,16 +197,16 @@ class WyreStormVideoInputSensor(CoordinatorEntity[WyreStormCoordinator], BinaryS
     @property
     def is_on(self) -> bool | None:
         """Return true if video input is active."""
-        if not self.coordinator.data:
+        if not self.coordinator.is_ready():
             return None
 
-        device_data = self.coordinator.data.get("devices", {}).get(self.device_id)
-        if not device_data:
+        device = self.coordinator.get_device_info(self.device_id)
+        if not device:
             return None
 
         # Check if HDMI input is active and has resolution
-        hdmi_in_active = device_data.get("hdmi_in_active", False)
-        resolution = device_data.get("resolution")
+        hdmi_in_active = device.hdmi_in_active
+        resolution = getattr(device.device_json, "resolution", None) if device.device_json else None
         return bool(hdmi_in_active and resolution)
 
     @property
@@ -181,7 +217,14 @@ class WyreStormVideoInputSensor(CoordinatorEntity[WyreStormCoordinator], BinaryS
     @property
     def device_info(self) -> DeviceInfo:
         """Return device info."""
-        device_data = self.coordinator.data.get("devices", {}).get(self.device_id, {}) if self.coordinator.data else {}
+        device = self.coordinator.get_device_info(self.device_id) if self.coordinator.is_ready() else None
+        device_attrs = {}
+        if device and device.device_json:
+            device_attrs = {
+                attr: getattr(device.device_json, attr, None)
+                for attr in dir(device.device_json)
+                if not attr.startswith("_")
+            }
         return create_device_info(
             self.coordinator.host,
             self.device_id,
@@ -189,20 +232,39 @@ class WyreStormVideoInputSensor(CoordinatorEntity[WyreStormCoordinator], BinaryS
                 "type": "encoder",
                 "model": self.device_data.get("model", "NetworkHD Encoder"),
             },
-            device_data,
+            device_attrs,
         )
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return all available device attributes dynamically."""
-        if not self.coordinator.data:
+        if not self.coordinator.is_ready():
             return {}
 
-        device_data = self.coordinator.data.get("devices", {}).get(self.device_id)
-        if not device_data:
+        device = self.coordinator.get_device_info(self.device_id)
+        if not device:
             return {}
 
-        attributes = get_device_attributes(self.device_id, self.device_type, device_data)
+        # Build attributes dict from device data sources
+        device_attrs = {}
+        if device.device_json:
+            device_attrs.update(
+                {
+                    attr: getattr(device.device_json, attr, None)
+                    for attr in dir(device.device_json)
+                    if not attr.startswith("_")
+                }
+            )
+        if device.device_status:
+            device_attrs.update(
+                {
+                    attr: getattr(device.device_status, attr, None)
+                    for attr in dir(device.device_status)
+                    if not attr.startswith("_")
+                }
+            )
+
+        attributes = get_device_attributes(self.device_id, self.device_type, device_attrs)
         attributes["model"] = self.device_data.get("model", "Unknown")
         return attributes
 
@@ -235,16 +297,18 @@ class WyreStormVideoOutputSensor(CoordinatorEntity[WyreStormCoordinator], Binary
     @property
     def is_on(self) -> bool | None:
         """Return true if video output is active."""
-        if not self.coordinator.data:
+        if not self.coordinator.is_ready():
             return None
 
-        device_data = self.coordinator.data.get("devices", {}).get(self.device_id)
-        if not device_data:
+        device = self.coordinator.get_device_info(self.device_id)
+        if not device:
             return None
 
         # Check if HDMI output is active and has resolution
-        hdmi_out_active = device_data.get("hdmi_out_active", False)
-        hdmi_out_resolution = device_data.get("hdmi_out_resolution")
+        hdmi_out_active = device.hdmi_out_active
+        hdmi_out_resolution = (
+            getattr(device.device_status, "hdmi_out_resolution", None) if device.device_status else None
+        )
         return bool(hdmi_out_active and hdmi_out_resolution)
 
     @property
@@ -255,7 +319,14 @@ class WyreStormVideoOutputSensor(CoordinatorEntity[WyreStormCoordinator], Binary
     @property
     def device_info(self) -> DeviceInfo:
         """Return device info."""
-        device_data = self.coordinator.data.get("devices", {}).get(self.device_id, {}) if self.coordinator.data else {}
+        device = self.coordinator.get_device_info(self.device_id) if self.coordinator.is_ready() else None
+        device_attrs = {}
+        if device and device.device_json:
+            device_attrs = {
+                attr: getattr(device.device_json, attr, None)
+                for attr in dir(device.device_json)
+                if not attr.startswith("_")
+            }
         return create_device_info(
             self.coordinator.host,
             self.device_id,
@@ -263,19 +334,38 @@ class WyreStormVideoOutputSensor(CoordinatorEntity[WyreStormCoordinator], Binary
                 "type": "decoder",
                 "model": self.device_data.get("model", "NetworkHD Decoder"),
             },
-            device_data,
+            device_attrs,
         )
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return all available device attributes dynamically."""
-        if not self.coordinator.data:
+        if not self.coordinator.is_ready():
             return {}
 
-        device_data = self.coordinator.data.get("devices", {}).get(self.device_id)
-        if not device_data:
+        device = self.coordinator.get_device_info(self.device_id)
+        if not device:
             return {}
 
-        attributes = get_device_attributes(self.device_id, self.device_type, device_data)
+        # Build attributes dict from device data sources
+        device_attrs = {}
+        if device.device_json:
+            device_attrs.update(
+                {
+                    attr: getattr(device.device_json, attr, None)
+                    for attr in dir(device.device_json)
+                    if not attr.startswith("_")
+                }
+            )
+        if device.device_status:
+            device_attrs.update(
+                {
+                    attr: getattr(device.device_status, attr, None)
+                    for attr in dir(device.device_status)
+                    if not attr.startswith("_")
+                }
+            )
+
+        attributes = get_device_attributes(self.device_id, self.device_type, device_attrs)
         attributes["model"] = self.device_data.get("model", "Unknown")
         return attributes

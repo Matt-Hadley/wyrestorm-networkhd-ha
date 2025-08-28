@@ -58,6 +58,22 @@ class MockBinarySensorDeviceClass:
     RUNNING = "running"
 
 
+class MockDeviceJsonString:
+    """Mock for WyreStorm DeviceJsonString."""
+
+    def __init__(self, **kwargs):
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+
+
+class MockDeviceStatus:
+    """Mock for WyreStorm DeviceStatus."""
+
+    def __init__(self, **kwargs):
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+
+
 # Create a special mock that supports subscription for generic types
 class SubscriptableMock(MagicMock):
     """Mock that supports generic type subscripting."""
@@ -149,8 +165,38 @@ def setup_wyrestorm_mocks():
     wyrestorm_mock.NetworkHDClientSSH = MagicMock
     wyrestorm_mock.exceptions = MagicMock()
     wyrestorm_mock.exceptions.NetworkHDError = Exception
+
+    # Set up models module and api_query submodule
+    models_mock = MagicMock()
+    api_query_mock = MagicMock()
+
+    # Create mock classes for the data types
+    class MockDeviceInfo:
+        def __init__(self, **kwargs):
+            for key, value in kwargs.items():
+                setattr(self, key, value)
+
+    class MockDeviceJsonString:
+        def __init__(self, **kwargs):
+            for key, value in kwargs.items():
+                setattr(self, key, value)
+
+    class MockDeviceStatus:
+        def __init__(self, **kwargs):
+            for key, value in kwargs.items():
+                setattr(self, key, value)
+
+    api_query_mock.DeviceInfo = MockDeviceInfo
+    api_query_mock.DeviceJsonString = MockDeviceJsonString
+    api_query_mock.DeviceStatus = MockDeviceStatus
+
+    models_mock.api_query = api_query_mock
+    wyrestorm_mock.models = models_mock
+
     sys.modules["wyrestorm_networkhd"] = wyrestorm_mock
     sys.modules["wyrestorm_networkhd.exceptions"] = wyrestorm_mock.exceptions
+    sys.modules["wyrestorm_networkhd.models"] = models_mock
+    sys.modules["wyrestorm_networkhd.models.api_query"] = api_query_mock
 
 
 def setup_third_party_mocks():

@@ -1,6 +1,5 @@
 """Test WyreStorm sink power buttons for WyreStorm NetworkHD integration."""
 
-
 import pytest
 from homeassistant.helpers.entity import EntityCategory
 from wyrestorm_networkhd.exceptions import NetworkHDError

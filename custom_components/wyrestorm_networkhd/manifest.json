@@ -11,7 +11,7 @@
   "issue_tracker": "https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/issues",
   "loggers": ["wyrestorm_networkhd"],
   "requirements": [
-    "wyrestorm-networkhd>=1.1.0"
+    "wyrestorm-networkhd>=2.0.0"
   ],
   "version": "1.0.0"
 }

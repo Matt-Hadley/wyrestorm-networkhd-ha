@@ -4,6 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "wyrestorm-networkhd-ha"
+version = "1.0.0"
 description = "Home Assistant integration for WyreStorm NetworkHD matrix switching and device control"
 requires-python = ">=3.11"
 keywords = [
@@ -31,6 +32,9 @@ classifiers = [
     "Topic :: System :: Networking",
     "Topic :: Multimedia :: Video",
 ]
+
+[tool.setuptools]
+packages = ["custom_components.wyrestorm_networkhd"]
 
 [project.optional-dependencies]
 dev = [

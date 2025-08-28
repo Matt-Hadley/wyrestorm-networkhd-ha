@@ -141,16 +141,19 @@ class TestWyreStormSourceSelect(SelectTestBase):
     @pytest.mark.asyncio
     async def test_async_select_option_network_error(self, source_select, mock_select_coordinator):
         """Test select option with network error."""
-        await self.assert_select_option_error(
-            source_select, "encoder1", mock_select_coordinator.api.media_stream_matrix_switch.matrix_set, NetworkHDError
-        )
+
+        mock_select_coordinator.api.media_stream_matrix_switch.matrix_set.side_effect = NetworkHDError("Network error")
+
+        with pytest.raises(NetworkHDError):
+            await source_select.async_select_option("encoder1")
 
     @pytest.mark.asyncio
     async def test_async_select_option_generic_error(self, source_select, mock_select_coordinator):
         """Test select option with generic error."""
-        await self.assert_select_option_error(
-            source_select, "encoder1", mock_select_coordinator.api.media_stream_matrix_switch.matrix_set, RuntimeError
-        )
+        mock_select_coordinator.api.media_stream_matrix_switch.matrix_set.side_effect = RuntimeError("Generic error")
+
+        with pytest.raises(RuntimeError):
+            await source_select.async_select_option("encoder1")
 
     def test_device_info_with_ip_fallback(self, mock_select_coordinator):
         """Test device info with IP address fallback for device name."""

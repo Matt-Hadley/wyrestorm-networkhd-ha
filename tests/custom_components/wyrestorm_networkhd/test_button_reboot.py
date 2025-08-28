@@ -65,13 +65,17 @@ class TestWyreStormRebootButton(ButtonTestBase):
     @pytest.mark.asyncio
     async def test_async_press_network_error(self, reboot_button, mock_button_coordinator):
         """Test reboot button press with network error."""
-        await self.assert_button_press_network_error(
-            reboot_button, mock_button_coordinator, mock_button_coordinator.api.reboot_reset.set_reboot
-        )
+        from wyrestorm_networkhd.exceptions import NetworkHDError
+
+        mock_button_coordinator.api.reboot_reset.set_reboot.side_effect = NetworkHDError("Network error")
+
+        with pytest.raises(NetworkHDError):
+            await reboot_button.async_press()
 
     @pytest.mark.asyncio
     async def test_async_press_generic_error(self, reboot_button, mock_button_coordinator):
         """Test reboot button press with generic error."""
-        await self.assert_button_press_generic_error(
-            reboot_button, mock_button_coordinator, mock_button_coordinator.api.reboot_reset.set_reboot
-        )
+        mock_button_coordinator.api.reboot_reset.set_reboot.side_effect = RuntimeError("Generic error")
+
+        with pytest.raises(RuntimeError):
+            await reboot_button.async_press()
