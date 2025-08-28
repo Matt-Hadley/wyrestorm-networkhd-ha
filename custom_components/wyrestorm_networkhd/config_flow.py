@@ -27,18 +27,17 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 
-class WyrestormNetworkHDConfigFlow(config_entries.ConfigFlow):
+class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for WyreStorm NetworkHD."""
 
     VERSION = 1
-    domain = DOMAIN
 
     @staticmethod
     def async_get_options_flow(
         config_entry: config_entries.ConfigEntry,
-    ) -> WyreStormOptionsFlow:
+    ) -> OptionsFlow:
         """Create the options flow."""
-        return WyreStormOptionsFlow(config_entry)
+        return OptionsFlow(config_entry)
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         """Handle the initial step."""
@@ -127,7 +126,7 @@ class WyrestormNetworkHDConfigFlow(config_entries.ConfigFlow):
         )
 
 
-class WyreStormOptionsFlow(config_entries.OptionsFlow):
+class OptionsFlow(config_entries.OptionsFlow):
     """Handle options flow for WyreStorm NetworkHD integration."""
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
