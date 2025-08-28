@@ -1,5 +1,5 @@
 """Constants for the WyreStorm NetworkHD integration."""
-from datetime import timedelta
+
 from typing import Final
 
 # Integration metadata
@@ -30,7 +30,7 @@ PLATFORMS: Final = ["binary_sensor", "select", "button"]
 
 # Device classes (for reference)
 DEVICE_CLASS_ENCODER: Final = "encoder"
-DEVICE_CLASS_DECODER: Final = "decoder" 
+DEVICE_CLASS_DECODER: Final = "decoder"
 DEVICE_CLASS_CONTROLLER: Final = "controller"
 
 # Services

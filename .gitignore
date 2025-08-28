@@ -85,3 +85,21 @@ home-assistant_v2.db*
 # Docker
 .docker/
 docker-compose.override.yml
+
+security-report.json
+# Ruff
+.ruff_cache/
+
+# Claude AI Assistant
+.claude/
+
+# Logs and temporary files
+*.log
+*.tmp
+*.bak
+
+# Python development
+*.pyc
+*.pyo
+*.pyd
+

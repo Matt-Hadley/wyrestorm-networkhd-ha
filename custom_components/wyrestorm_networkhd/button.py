@@ -1,4 +1,5 @@
 """Button platform for WyreStorm NetworkHD integration."""
+
 from __future__ import annotations
 
 import logging
@@ -7,20 +8,14 @@ from typing import Any
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.entity import DeviceInfo, EntityCategory
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from wyrestorm_networkhd.exceptions import NetworkHDError
-
+from ._command_utils import safe_device_command
+from ._device_utils import create_device_info
+from ._entity_utils import check_availability, log_device_setup
 from .const import DOMAIN
 from .coordinator import WyreStormCoordinator
-from ._device_utils import create_device_info
-from ._entity_utils import (
-    check_availability,
-    validate_device_for_setup,
-    log_device_setup,
-)
-from ._command_utils import safe_device_command
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -32,21 +27,31 @@ async def async_setup_entry(
 ) -> None:
     """Set up WyreStorm NetworkHD button entities."""
     coordinator: WyreStormCoordinator = hass.data[DOMAIN][entry.entry_id]
-    
-    devices_data = validate_device_for_setup(coordinator, _LOGGER, "button")
-    if devices_data is None:
+
+    # Check if coordinator is ready for setup
+    if not coordinator.is_ready():
+        _LOGGER.warning("Coordinator not ready, skipping button setup")
         return
 
-    log_device_setup(_LOGGER, "button entities", devices_data)
+    if coordinator.has_errors():
+        _LOGGER.warning("Coordinator has errors, skipping button setup")
+        return
+
+    devices_data = coordinator.data.get("devices", {})
+    if devices_data:
+        log_device_setup(_LOGGER, "button entities", devices_data)
+    else:
+        _LOGGER.warning("No devices data available for button setup")
+
     entities = []
-    
-    # Add reboot button for the controller
+
+    # Add reboot button for the controller (always add this)
     entities.append(WyreStormRebootButton(coordinator))
-    
+
     for device_id, device_data in devices_data.items():
         device_type = device_data.get("type")
         _LOGGER.debug("Processing device %s (type: %s)", device_id, device_type)
-        
+
         if device_type == "decoder":
             # For decoders: add sink power control buttons
             _LOGGER.debug("Creating sink power buttons for decoder %s", device_id)
@@ -64,7 +69,7 @@ class WyreStormRebootButton(ButtonEntity):
         """Initialize the reboot button."""
         super().__init__()
         self.coordinator = coordinator
-        
+
         # Set entity attributes
         self._attr_unique_id = f"{coordinator.host}_controller_reboot"
         self._attr_name = "Reboot Controller"
@@ -80,9 +85,7 @@ class WyreStormRebootButton(ButtonEntity):
     @property
     def device_info(self) -> DeviceInfo:
         """Return device info."""
-        return create_device_info(
-            self.coordinator.host, "", {}, {}, is_controller=True
-        )
+        return create_device_info(self.coordinator.host, "", {}, {}, is_controller=True)
 
     @safe_device_command(_LOGGER, "controller", "reboot")
     async def async_press(self) -> None:
@@ -94,14 +97,19 @@ class WyreStormRebootButton(ButtonEntity):
 class WyreStormSinkPowerOnButton(ButtonEntity):
     """Button to turn on display via sink power control."""
 
-    def __init__(self, coordinator: WyreStormCoordinator, device_id: str, device_data: dict[str, Any]) -> None:
+    def __init__(
+        self,
+        coordinator: WyreStormCoordinator,
+        device_id: str,
+        device_data: dict[str, Any],
+    ) -> None:
         """Initialize the sink power on button."""
         super().__init__()
         self.coordinator = coordinator
         self.device_id = device_id
         self.device_data = device_data
         self.device_type = device_data.get("type", "unknown")
-        
+
         # Set entity attributes
         self._attr_unique_id = f"{coordinator.host}_{device_id}_display_power_on"
         self._attr_name = "Display Power On"
@@ -114,11 +122,11 @@ class WyreStormSinkPowerOnButton(ButtonEntity):
         # Check if coordinator is ready first
         if not self.coordinator.is_ready():
             return False
-            
+
         # Check if coordinator has errors
         if self.coordinator.has_errors():
             return False
-            
+
         # Device-specific buttons need device to be online
         return check_availability(self.coordinator, self.device_id)
 
@@ -129,33 +137,42 @@ class WyreStormSinkPowerOnButton(ButtonEntity):
         return create_device_info(
             self.coordinator.host,
             self.device_id,
-            {"type": "decoder", "model": self.device_data.get("model", "NetworkHD Decoder")},
-            device_data
+            {
+                "type": "decoder",
+                "model": self.device_data.get("model", "NetworkHD Decoder"),
+            },
+            device_data,
         )
 
     async def async_press(self) -> None:
         """Handle the button press - send sink power on command."""
+
         @safe_device_command(_LOGGER, self.device_id, "sink power on")
         async def _send_command():
             await self.coordinator.api.connected_device_control.config_set_device_sinkpower(
                 power="on", rx=self.device_id
             )
             await self.coordinator.async_request_refresh()
-        
+
         await _send_command()
 
 
 class WyreStormSinkPowerOffButton(ButtonEntity):
     """Button to turn off display via sink power control."""
 
-    def __init__(self, coordinator: WyreStormCoordinator, device_id: str, device_data: dict[str, Any]) -> None:
+    def __init__(
+        self,
+        coordinator: WyreStormCoordinator,
+        device_id: str,
+        device_data: dict[str, Any],
+    ) -> None:
         """Initialize the sink power off button."""
         super().__init__()
         self.coordinator = coordinator
         self.device_id = device_id
         self.device_data = device_data
         self.device_type = device_data.get("type", "unknown")
-        
+
         # Set entity attributes
         self._attr_unique_id = f"{coordinator.host}_{device_id}_display_power_off"
         self._attr_name = "Display Power Off"
@@ -168,11 +185,11 @@ class WyreStormSinkPowerOffButton(ButtonEntity):
         # Check if coordinator is ready first
         if not self.coordinator.is_ready():
             return False
-            
+
         # Check if coordinator has errors
         if self.coordinator.has_errors():
             return False
-            
+
         # Device-specific buttons need device to be online
         return check_availability(self.coordinator, self.device_id)
 
@@ -183,17 +200,21 @@ class WyreStormSinkPowerOffButton(ButtonEntity):
         return create_device_info(
             self.coordinator.host,
             self.device_id,
-            {"type": "decoder", "model": self.device_data.get("model", "NetworkHD Decoder")},
-            device_data
+            {
+                "type": "decoder",
+                "model": self.device_data.get("model", "NetworkHD Decoder"),
+            },
+            device_data,
         )
 
     async def async_press(self) -> None:
         """Handle the button press - send sink power off command."""
+
         @safe_device_command(_LOGGER, self.device_id, "sink power off")
         async def _send_command():
             await self.coordinator.api.connected_device_control.config_set_device_sinkpower(
                 power="off", rx=self.device_id
             )
             await self.coordinator.async_request_refresh()
-        
+
         await _send_command()

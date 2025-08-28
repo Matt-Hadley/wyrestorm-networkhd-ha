@@ -6,23 +6,32 @@ import logging
 from typing import Any
 
 import voluptuous as vol
-
 from homeassistant import config_entries
-from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME, CONF_PORT
+from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_PORT, CONF_USERNAME
 from homeassistant.data_entry_flow import FlowResult
 
 from wyrestorm_networkhd import NetworkHDClientSSH
 from wyrestorm_networkhd.exceptions import NetworkHDError
 
-from .const import DOMAIN, DEFAULT_PORT, DEFAULT_USERNAME, DEFAULT_PASSWORD, DEFAULT_UPDATE_INTERVAL, CONF_UPDATE_INTERVAL, SSH_CONNECT_TIMEOUT, SSH_HOST_KEY_POLICY
+from .const import (
+    CONF_UPDATE_INTERVAL,
+    DEFAULT_PASSWORD,
+    DEFAULT_PORT,
+    DEFAULT_UPDATE_INTERVAL,
+    DEFAULT_USERNAME,
+    DOMAIN,
+    SSH_CONNECT_TIMEOUT,
+    SSH_HOST_KEY_POLICY,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class WyrestormNetworkHDConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+class WyrestormNetworkHDConfigFlow(config_entries.ConfigFlow):
     """Handle a config flow for WyreStorm NetworkHD."""
 
     VERSION = 1
+    domain = DOMAIN
 
     @staticmethod
     def async_get_options_flow(
@@ -51,21 +60,22 @@ class WyrestormNetworkHDConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     ssh_host_key_policy=SSH_HOST_KEY_POLICY,
                     timeout=SSH_CONNECT_TIMEOUT,
                 )
-                
+
                 # Test connection
                 await client.connect()
-                
+
                 # Test a basic API call
                 from wyrestorm_networkhd import NHDAPI
+
                 api = NHDAPI(client)
                 await api.api_query.config_get_version()
-                
+
                 # Create entry
                 return self.async_create_entry(
                     title=f"WyreStorm NetworkHD Controller ({user_input[CONF_HOST]})",
                     data=user_input,
                 )
-                
+
             except NetworkHDError as err:
                 _LOGGER.error("Connection test failed: %s", err)
                 if "authentication" in str(err).lower():
@@ -86,7 +96,10 @@ class WyrestormNetworkHDConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         if client.is_connected():
                             await client.disconnect()
                     except Exception as disconnect_err:
-                        _LOGGER.debug("Error disconnecting client during cleanup: %s", disconnect_err)
+                        _LOGGER.debug(
+                            "Error disconnecting client during cleanup: %s",
+                            disconnect_err,
+                        )
 
         # Show form
         return self.async_show_form(
@@ -104,8 +117,13 @@ class WyrestormNetworkHDConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             ),
             errors=errors,
             description_placeholders={
-                "controller_info": "This integration connects to your WyreStorm NetworkHD controller via SSH to manage matrix switching, device control, and monitoring. The update interval controls how often the integration polls for device status (10-300 seconds)."
-            }
+                "controller_info": (
+                    "This integration connects to your WyreStorm NetworkHD controller via SSH "
+                    "to manage matrix switching, device control, and monitoring. "
+                    "The update interval controls how often the integration polls for "
+                    "device status (10-300 seconds)."
+                )
+            },
         )
 
 
@@ -122,16 +140,23 @@ class WyreStormOptionsFlow(config_entries.OptionsFlow):
             return self.async_create_entry(title="", data=user_input)
 
         # Check options first, then config data, then default
-        current_interval = self.config_entry.options.get(CONF_UPDATE_INTERVAL) or self.config_entry.data.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
-        
+        current_interval = self.config_entry.options.get(CONF_UPDATE_INTERVAL) or self.config_entry.data.get(
+            CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL
+        )
+
         return self.async_show_form(
             step_id="init",
-            data_schema=vol.Schema({
-                vol.Optional(CONF_UPDATE_INTERVAL, default=current_interval): vol.All(
-                    int, vol.Range(min=10, max=300)
-                ),
-            }),
+            data_schema=vol.Schema(
+                {
+                    vol.Optional(CONF_UPDATE_INTERVAL, default=current_interval): vol.All(
+                        int, vol.Range(min=10, max=300)
+                    ),
+                }
+            ),
             description_placeholders={
-                "current_interval": f"Current polling interval is {current_interval} seconds. You can change this to any value between 10-300 seconds."
-            }
+                "current_interval": (
+                    f"Current polling interval is {current_interval} seconds. "
+                    "You can change this to any value between 10-300 seconds."
+                )
+            },
         )

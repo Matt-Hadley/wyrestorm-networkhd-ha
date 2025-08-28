@@ -1,0 +1,59 @@
+repos:
+    - repo: local
+      hooks:
+          # Use Makefile targets for all tool-based checks
+          - id: format-code
+            name: format Python code (via Makefile)
+            entry: make format-code
+            language: system
+            types: [python]
+            pass_filenames: false
+            always_run: true
+
+          - id: ha-check
+            name: validate Home Assistant component (via Makefile)
+            entry: make ha-check
+            language: system
+            files: ^custom_components/
+            pass_filenames: false
+            always_run: false
+
+          - id: lint
+            name: lint checks (via Makefile)
+            entry: make lint
+            language: system
+            types: [python]
+            pass_filenames: false
+            always_run: true
+
+          - id: type-check
+            name: type checking (via Makefile)
+            entry: make type-check
+            language: system
+            types: [python]
+            pass_filenames: false
+            always_run: true
+
+          - id: security-check
+            name: security checks (via Makefile)
+            entry: make security-check
+            language: system
+            types: [python]
+            pass_filenames: false
+            always_run: true
+
+          - id: code-quality
+            name: code quality checks (via Makefile)
+            entry: make code-quality
+            language: system
+            types: [python]
+            pass_filenames: false
+            always_run: true
+
+          - id: test-unit
+            name: run unit tests (via Makefile)
+            entry: make test-unit
+            language: system
+            types: [python]
+            pass_filenames: false
+            always_run: true
