@@ -1,0 +1,66 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "WyreStorm NetworkHD 2 Controller",
+        "description": "Enter the SSH connection details for your WyreStorm NetworkHD controller. This integration connects to the controller over SSH to manage your matrix switching system.",
+        "data": {
+          "host": "Controller IP Address",
+          "username": "SSH Username",
+          "password": "SSH Password",
+          "port": "SSH Port",
+          "ssh_timeout": "SSH Connection Timeout (seconds)",
+          "update_interval": "Update Interval (seconds)"
+        },
+        "data_description": {
+          "host": "The IP address of your WyreStorm NetworkHD controller",
+          "username": "SSH username for the controller (default: wyrestorm)",
+          "password": "SSH password for the controller (default: networkhd)",
+          "port": "SSH port for the controller (default: 10022)",
+          "ssh_timeout": "SSH connection timeout in seconds (5-60)",
+          "update_interval": "How often to poll for device status updates (10-300 seconds)"
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigure WyreStorm NetworkHD 2",
+        "description": "Update the configuration settings for your WyreStorm NetworkHD 2 controller.",
+        "data": {
+          "host": "Controller IP Address",
+          "username": "SSH Username",
+          "password": "SSH Password",
+          "port": "SSH Port",
+          "ssh_timeout": "SSH Connection Timeout (seconds)",
+          "update_interval": "Update Interval (seconds)"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "A WyreStorm NetworkHD 2 Controller with this IP address is already configured.",
+      "reconfigure_successful": "Configuration updated successfully. The integration has been reloaded with the new settings."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "WyreStorm NetworkHD 2 Options",
+        "description": "Configure settings for the WyreStorm NetworkHD 2 integration. All settings can be changed here.",
+        "data": {
+          "host": "Controller IP Address",
+          "username": "SSH Username", 
+          "password": "SSH Password",
+          "port": "SSH Port",
+          "ssh_timeout": "SSH Connection Timeout (seconds)",
+          "update_interval": "Update Interval (seconds)"
+        },
+        "data_description": {
+          "host": "The IP address of your WyreStorm NetworkHD controller",
+          "username": "SSH username for the controller",
+          "password": "SSH password for the controller",
+          "port": "SSH port for the controller",
+          "ssh_timeout": "SSH connection timeout in seconds (5-60)",
+          "update_interval": "How often to poll for device status updates (10-300 seconds)"
+        }
+      }
+    }
+  }
+}

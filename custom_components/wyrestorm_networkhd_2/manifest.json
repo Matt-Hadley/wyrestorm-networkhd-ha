@@ -1,0 +1,13 @@
+{
+  "domain": "wyrestorm_networkhd_2",
+  "name": "WyreStorm NetworkHD 2",
+  "codeowners": [],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "",
+  "integration_type": "device",
+  "iot_class": "local_polling",
+  "requirements": ["wyrestorm-networkhd>=2.1.0"],
+  "version": "2.0.0",
+  "zeroconf": []
+}
