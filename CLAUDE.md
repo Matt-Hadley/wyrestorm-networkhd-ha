@@ -20,6 +20,10 @@ This is a Home Assistant integration for WyreStorm NetworkHD matrix switching sy
    
 3. **Device info**: Automatically cached for 10 minutes via decorator
 
+4. **Real-time notifications**: Automatic selective refresh on events
+   - Device online/offline → refreshes device_jsonstring
+   - Video found/lost → refreshes matrix_assignments
+
 ### Caching Strategy
 Use the `@cache_for_seconds` decorator for rarely-changing data:
 ```python

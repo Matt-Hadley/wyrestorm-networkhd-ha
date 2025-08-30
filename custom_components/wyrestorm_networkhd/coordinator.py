@@ -83,6 +83,75 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
         # Create API wrapper
         self.api = NHDAPI(self.client)
 
+    def _register_notification_handlers(self) -> None:
+        """Register callbacks for real-time notifications from the device.
+
+        Notifications provide instant updates for:
+        - Device online/offline events (endpoint notifications)
+        - Video signal found/lost events (video notifications)
+        """
+        if not hasattr(self.client, "notification_handler"):
+            _LOGGER.warning("Client does not support notifications")
+            return
+
+        handler = self.client.notification_handler
+
+        # Register for device online/offline notifications
+        handler.register_callback("endpoint", lambda n: asyncio.create_task(self._on_endpoint_notification(n)))
+
+        # Register for video found/lost notifications
+        handler.register_callback("video", lambda n: asyncio.create_task(self._on_video_notification(n)))
+
+        _LOGGER.info("Registered notification handlers for endpoint and video events")
+
+    async def _on_endpoint_notification(self, notification) -> None:
+        """Handle device online/offline notifications.
+
+        Args:
+            notification: NotificationEndpoint object with device status change
+        """
+        try:
+            device_name = notification.device_reference
+            is_online = notification.action == "+"
+
+            _LOGGER.info(
+                "Device %s notification: %s is now %s",
+                "online" if is_online else "offline",
+                device_name,
+                "online" if is_online else "offline",
+            )
+
+            # Refresh device JSON data to update online status
+            await self.async_selective_refresh(["device_jsonstring"])
+
+        except Exception as err:
+            _LOGGER.error("Error handling endpoint notification: %s", err)
+
+    async def _on_video_notification(self, notification) -> None:
+        """Handle video found/lost notifications.
+
+        Args:
+            notification: NotificationVideo object with video status change
+        """
+        try:
+            device_name = notification.device_reference
+            video_status = notification.action  # "found" or "lost"
+            source_device = getattr(notification, "source_device", None)
+
+            _LOGGER.info(
+                "Video %s notification: %s %s %s",
+                video_status,
+                device_name,
+                f"from {source_device}" if source_device else "",
+                "video signal",
+            )
+
+            # Refresh matrix assignments when video routing changes
+            await self.async_selective_refresh(["matrix_assignments"])
+
+        except Exception as err:
+            _LOGGER.error("Error handling video notification: %s", err)
+
     @cache_for_seconds(600)  # Cache device info for 10 minutes
     async def _get_cached_device_info(self):
         """Get device info with caching to reduce API calls.
@@ -102,6 +171,10 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
             _LOGGER.debug("Connecting to device at %s...", self.host)
             await self.client.connect()
             _LOGGER.debug("Device connection successful")
+
+            # Register notification callbacks
+            self._register_notification_handlers()
+            _LOGGER.debug("Notification handlers registered")
 
             # Initial data fetch using built-in method
             await self.async_config_entry_first_refresh()
