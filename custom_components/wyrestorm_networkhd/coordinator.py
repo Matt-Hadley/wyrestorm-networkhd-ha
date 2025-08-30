@@ -316,15 +316,15 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
         if isinstance(target, str):
             target = [target]
 
+        # Validate target devices exist (common for both connect and disconnect)
+        if self.data:
+            valid_target_aliases = {rx.alias_name for rx in self.data.get_receivers_list()}
+            for tgt in target:
+                if tgt not in valid_target_aliases:
+                    raise ValueError(f"Target device '{tgt}' not found")
+
         # Handle disconnect case (source is None)
         if source is None:
-            # Validate target devices exist
-            if self.data:
-                valid_target_aliases = {rx.alias_name for rx in self.data.get_receivers_list()}
-                for tgt in target:
-                    if tgt not in valid_target_aliases:
-                        raise ValueError(f"Target device '{tgt}' not found")
-
             # Disconnect targets (set to no source)
             await self.api.media_stream_matrix_switch.matrix_set_null(target)
             _LOGGER.info("Disconnected receivers: %s", target)
@@ -333,18 +333,12 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
             if isinstance(source, str):
                 source = [source]
 
-            # Validate devices exist by alias name
+            # Validate source devices exist
             if self.data:
                 valid_source_aliases = {tx.alias_name for tx in self.data.get_transmitters_list()}
-                valid_target_aliases = {rx.alias_name for rx in self.data.get_receivers_list()}
-
                 for src in source:
                     if src not in valid_source_aliases:
                         raise ValueError(f"Source device '{src}' not found")
-
-                for tgt in target:
-                    if tgt not in valid_target_aliases:
-                        raise ValueError(f"Target device '{tgt}' not found")
 
             # Execute matrix commands using alias names
             for src in source:
