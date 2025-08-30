@@ -72,10 +72,11 @@ async def test_connection(user_input: dict[str, Any]) -> dict[str, str]:
     return errors
 
 
-class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+class ConfigFlow(config_entries.ConfigFlow):
     """Handle a config flow for WyreStorm NetworkHD."""
 
     VERSION = 1
+    DOMAIN = DOMAIN
 
     @staticmethod
     def async_get_options_flow(config_entry: config_entries.ConfigEntry) -> OptionsFlow:

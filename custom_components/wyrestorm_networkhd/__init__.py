@@ -95,7 +95,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if not hass.data[DOMAIN]:
             _unregister_services(hass)
 
-    return unload_ok
+    return bool(unload_ok)
 
 
 def _register_services(hass: HomeAssistant) -> None:

@@ -62,7 +62,7 @@ def build_device_collections(
 
 def process_matrix_assignments(matrix_response: Any) -> dict[str, str]:
     """Process matrix assignments into receiver alias -> source alias mapping."""
-    matrix_assignments = {}
+    matrix_assignments: dict[str, str] = {}
 
     if not (matrix_response and hasattr(matrix_response, "assignments")):
         _LOGGER.debug("No matrix assignments found")

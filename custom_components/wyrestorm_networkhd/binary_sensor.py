@@ -37,16 +37,18 @@ async def async_setup_entry(
     entities = []
 
     # Add controller link sensors for transmitters
-    for device in coordinator.get_transmitters():
-        entities.append(WyreStormControllerLinkSensor(coordinator, device, "transmitter"))
-        entities.append(WyreStormVideoInputSensor(coordinator, device))
-        _LOGGER.debug("Created controller link and video input sensors for transmitter %s", device.true_name)
+    for transmitter_device in coordinator.get_transmitters():
+        entities.append(WyreStormControllerLinkSensor(coordinator, transmitter_device, "transmitter"))
+        entities.append(WyreStormVideoInputSensor(coordinator, transmitter_device))
+        _LOGGER.debug(
+            "Created controller link and video input sensors for transmitter %s", transmitter_device.true_name
+        )
 
     # Add controller link sensors for receivers
-    for device in coordinator.get_receivers():
-        entities.append(WyreStormControllerLinkSensor(coordinator, device, "receiver"))
-        entities.append(WyreStormVideoOutputSensor(coordinator, device))
-        _LOGGER.debug("Created controller link and video output sensors for receiver %s", device.true_name)
+    for receiver_device in coordinator.get_receivers():
+        entities.append(WyreStormControllerLinkSensor(coordinator, receiver_device, "receiver"))
+        entities.append(WyreStormVideoOutputSensor(coordinator, receiver_device))
+        _LOGGER.debug("Created controller link and video output sensors for receiver %s", receiver_device.true_name)
 
     _LOGGER.info("Created %d binary sensor entities", len(entities))
     async_add_entities(entities)
@@ -96,7 +98,7 @@ class WyreStormControllerLinkSensor(CoordinatorEntity[WyreStormCoordinator], Bin
             device = self.coordinator.data.device_receivers.get(self.device_id)
 
         if device:
-            return device.online
+            return bool(device.online)
 
         return None
 

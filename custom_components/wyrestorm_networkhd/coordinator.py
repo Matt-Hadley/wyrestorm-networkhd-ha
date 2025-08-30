@@ -410,7 +410,7 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
         """
         if not self.is_ready():
             return []
-        return self.data.get_transmitters_list()
+        return list(self.data.device_transmitters.values())
 
     def get_receivers(self) -> list[DeviceReceiver]:
         """Get all receiver devices.
@@ -423,7 +423,7 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
         """
         if not self.is_ready():
             return []
-        return self.data.get_receivers_list()
+        return list(self.data.device_receivers.values())
 
     def get_controller(self) -> DeviceController | None:
         """Get the controller device.
@@ -436,7 +436,8 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
         """
         if not self.is_ready():
             return None
-        return self.data.device_controller
+        controller = self.data.device_controller
+        return controller if isinstance(controller, DeviceController) else None
 
     async def wait_for_data(self, timeout: int = 30) -> bool:
         """Wait for data to be available with timeout."""

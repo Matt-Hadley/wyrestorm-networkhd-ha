@@ -3,6 +3,7 @@
 import time
 from collections.abc import Callable
 from functools import wraps
+from typing import Any
 
 
 def cache_for_seconds(seconds: int) -> Callable:
@@ -31,8 +32,8 @@ def cache_for_seconds(seconds: int) -> Callable:
     """
 
     def decorator(func: Callable) -> Callable:
-        cache = {}
-        cache_time = {}
+        cache: dict[tuple, Any] = {}
+        cache_time: dict[tuple, float] = {}
 
         @wraps(func)
         async def wrapper(self, *args, **kwargs):
@@ -55,7 +56,11 @@ def cache_for_seconds(seconds: int) -> Callable:
             return result
 
         # Add method to clear cache if needed
-        wrapper.clear_cache = lambda: (cache.clear(), cache_time.clear())
+        def clear_cache() -> None:
+            cache.clear()
+            cache_time.clear()
+
+        wrapper.clear_cache = clear_cache  # type: ignore[attr-defined]
 
         return wrapper
 
