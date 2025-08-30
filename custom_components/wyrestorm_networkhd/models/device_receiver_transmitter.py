@@ -8,8 +8,6 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from wyrestorm_networkhd.models.api_query import DeviceInfo, DeviceJsonString, DeviceStatus
 
-DOMAIN = "wyrestorm_networkhd_2"
-
 
 @dataclass
 class DeviceBase:

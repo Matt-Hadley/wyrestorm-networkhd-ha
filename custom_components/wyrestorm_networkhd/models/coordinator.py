@@ -8,8 +8,6 @@ from datetime import datetime
 from .device_controller import DeviceController
 from .device_receiver_transmitter import DeviceReceiver, DeviceTransmitter
 
-DOMAIN = "wyrestorm_networkhd_2"
-
 
 @dataclass
 class CoordinatorData:
