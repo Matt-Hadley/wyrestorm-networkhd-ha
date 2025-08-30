@@ -111,8 +111,8 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
             notification: NotificationEndpoint object with device status change
         """
         try:
-            device_name = notification.device_reference
-            is_online = notification.action == "+"
+            device_name = notification.device
+            is_online = notification.online
 
             _LOGGER.info(
                 "Device %s notification: %s is now %s",
@@ -134,9 +134,9 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
             notification: NotificationVideo object with video status change
         """
         try:
-            device_name = notification.device_reference
-            video_status = notification.action  # "found" or "lost"
-            source_device = getattr(notification, "source_device", None)
+            device_name = notification.device
+            video_status = notification.status  # "found" or "lost"
+            source_device = notification.source_device
 
             _LOGGER.info(
                 "Video %s notification: %s %s %s",
@@ -146,8 +146,8 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 "video signal",
             )
 
-            # Refresh matrix assignments when video routing changes
-            await self.async_selective_refresh(["matrix_assignments"])
+            # Refresh device status to update video input state
+            await self.async_selective_refresh(["device_status"])
 
         except Exception as err:
             _LOGGER.error("Error handling video notification: %s", err)
