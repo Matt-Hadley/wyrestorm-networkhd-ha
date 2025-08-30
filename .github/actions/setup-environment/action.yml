@@ -1,0 +1,68 @@
+name: "Setup Environment"
+description: "Setup Python environment and Home Assistant integration dependencies"
+inputs:
+  install-deps:
+    description: "Whether to install project dependencies"
+    required: false
+    default: "true"
+outputs:
+  python-version:
+    description: "Python version from pyproject.toml"
+    value: ${{ steps.setup-env.outputs.python-version }}
+  integration-name:
+    description: "Integration domain name"
+    value: ${{ steps.setup-env.outputs.integration-name }}
+  package-name:
+    description: "Package name from pyproject.toml"
+    value: ${{ steps.setup-env.outputs.package-name }}
+
+runs:
+  using: "composite"
+  steps:
+    # First, set up a default Python version to read pyproject.toml
+    - name: Set up initial Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12" # Use a recent version that has tomllib
+
+    - name: Extract environment info
+      id: setup-env
+      shell: bash
+      run: |
+        # Read Python version from pyproject.toml
+        PYTHON_VERSION=$(python -c "
+        import tomllib
+        with open('pyproject.toml', 'rb') as f:
+            config = tomllib.load(f)
+        print(config['project']['requires-python'].replace('>=', ''))
+        ")
+        echo "python-version=$PYTHON_VERSION" >> $GITHUB_OUTPUT
+        
+        # Read integration name from manifest
+        INTEGRATION_NAME=$(python -c "
+        import json
+        with open('custom_components/wyrestorm_networkhd/manifest.json', 'r') as f:
+            manifest = json.load(f)
+        print(manifest['domain'])
+        ")
+        echo "integration-name=$INTEGRATION_NAME" >> $GITHUB_OUTPUT
+        
+        # Read package name from pyproject.toml
+        PACKAGE_NAME=$(python -c "
+        import tomllib
+        with open('pyproject.toml', 'rb') as f:
+            config = tomllib.load(f)
+        print(config['project']['name'])
+        ")
+        echo "package-name=$PACKAGE_NAME" >> $GITHUB_OUTPUT
+
+    - name: Set up Python ${{ steps.setup-env.outputs.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ steps.setup-env.outputs.python-version }}
+        cache: "pip"
+
+    - name: Install dependencies
+      if: inputs.install-deps == 'true'
+      shell: bash
+      run: make install-deps

@@ -1,0 +1,89 @@
+# PR Validation - Tests, Quality Checks, and HACS Validation
+name: PR Validation
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+
+concurrency:
+  group: pr-validation-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Quality Checks & Tests
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      coverage: ${{ steps.coverage.outputs.coverage }}
+      coverage-color: ${{ steps.coverage.outputs.color }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup environment
+        id: setup
+        uses: ./.github/actions/setup-environment
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            .venv
+          key: ${{ runner.os }}-python-${{ hashFiles('pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-python-
+
+      - name: Run health check
+        run: make health-check
+
+      - name: Coverage report
+        continue-on-error: true
+        uses: 5monkeys/cobertura-action@v14
+        with:
+          path: coverage.xml
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          minimum_coverage: 0
+          fail_below_threshold: false
+          show_missing: false
+          show_branch: false
+          only_changed_files: false
+
+      - name: Upload PR artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-artifacts-${{ github.event.number }}
+          path: |
+            security-report.json
+            htmlcov/
+            coverage.xml
+          retention-days: 30
+
+  hacs-validation:
+    name: HACS Validation
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: HACS validation
+        uses: hacs/action@main
+        with:
+          category: "integration"
+
+      - name: Hassfest validation
+        uses: home-assistant/actions/hassfest@master

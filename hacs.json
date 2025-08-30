@@ -1,8 +1,11 @@
 {
   "name": "WyreStorm NetworkHD",
   "content_in_root": false,
-  "zip_release": true,
-  "filename": "wyrestorm-networkhd-ha.zip",
+  "zip_release": false,
+  "filename": "wyrestorm_networkhd.zip",
   "homeassistant": "2024.12.0",
-  "render_readme": true
+  "render_readme": true,
+  "country": ["US", "GB", "CA", "AU", "NZ"],
+  "domains": ["binary_sensor", "button", "select"],
+  "iot_class": "Local Polling"
 }

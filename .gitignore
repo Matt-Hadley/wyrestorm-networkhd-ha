@@ -103,3 +103,6 @@ security-report.json
 *.pyo
 *.pyd
 
+# Generated version file from setuptools-scm
+custom_components/wyrestorm_networkhd/_version.py
+

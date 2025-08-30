@@ -1,0 +1,52 @@
+{
+    "printWidth": 120,
+    "tabWidth": 4,
+    "useTabs": false,
+    "semi": false,
+    "singleQuote": false,
+    "quoteProps": "as-needed",
+    "trailingComma": "es5",
+    "bracketSpacing": true,
+    "bracketSameLine": false,
+    "arrowParens": "avoid",
+    "proseWrap": "always",
+    "endOfLine": "lf",
+    "embeddedLanguageFormatting": "auto",
+    "htmlWhitespaceSensitivity": "css",
+    "insertPragma": false,
+
+    "jsxSingleQuote": false,
+    "requirePragma": false,
+    "vueIndentScriptAndStyle": false,
+    "overrides": [
+        {
+            "files": ["*.md", "*.markdown"],
+            "excludeFiles": ["CHANGELOG.md", "docs/reference/*.md"],
+            "options": {
+                "proseWrap": "always",
+                "printWidth": 120,
+                "tabWidth": 2,
+                "useTabs": false
+            }
+        },
+        {
+            "files": ["*.yml", "*.yaml"],
+            "options": {
+                "printWidth": 120,
+                "tabWidth": 4,
+                "useTabs": false,
+                "singleQuote": false,
+                "bracketSpacing": true
+            }
+        },
+        {
+            "files": ["*.json"],
+            "options": {
+                "printWidth": 120,
+                "tabWidth": 4,
+                "useTabs": false,
+                "trailingComma": "none"
+            }
+        }
+    ]
+}

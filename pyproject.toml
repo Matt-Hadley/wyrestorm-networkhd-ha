@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=80.9.0"]
+requires = ["setuptools>=80.9.0", "setuptools-scm>=8.1.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "wyrestorm-networkhd-ha"
-version = "1.0.0"
+dynamic = ["version"]
 description = "Home Assistant integration for WyreStorm NetworkHD matrix switching and device control"
 requires-python = ">=3.11"
 keywords = [
@@ -48,6 +48,20 @@ dev = [
     "mypy>=1.8.0",
     "pre-commit>=3.6.0",
     "vulture>=2.1.4",
+    "setuptools-scm>=8.1.0",
+]
+
+[tool.setuptools_scm]
+write_to = "custom_components/wyrestorm_networkhd/_version.py"
+tag_regex = "^v(?P<version>[^\\+]+)(?:\\+(?P<local>.*))?$"
+git_describe_command = [
+    "git",
+    "describe",
+    "--dirty",
+    "--tags",
+    "--long",
+    "--match",
+    "v*",
 ]
 
 # Ruff configuration - replaces Black, isort, and Flake8
@@ -61,6 +75,7 @@ exclude = [
     "__pycache__",
     "htmlcov",
     ".pytest_cache",
+    "custom_components/wyrestorm_networkhd/_version.py",
 ]
 
 # Ruff formatter configuration (replaces Black)
@@ -120,6 +135,7 @@ omit = [
     "*/tests/*",
     "*/__pycache__/*",
     "*/site-packages/*",
+    "custom_components/wyrestorm_networkhd/_version.py",
 ]
 
 [tool.coverage.html]
