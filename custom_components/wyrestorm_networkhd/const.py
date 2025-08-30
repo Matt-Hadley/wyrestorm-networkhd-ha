@@ -20,9 +20,6 @@ DEFAULT_USERNAME = "wyrestorm"
 DEFAULT_PASSWORD = "networkhd"  # WARNING: Change default credentials for security
 DEFAULT_UPDATE_INTERVAL = 60  # Default to 60 seconds
 
-# Device info refresh settings (to reduce API load for infrequently changing data)
-DEVICE_INFO_REFRESH_INTERVAL = 10  # Refresh device info every N regular updates
-
 # SSH Security Settings
 SSH_HOST_KEY_POLICY = "auto_add"  # Auto-add host keys with warning for usability
 

@@ -16,12 +16,12 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from wyrestorm_networkhd import NHDAPI, NetworkHDClientSSH
 
+from ._cache_utils import cache_for_seconds
 from ._utils_coordinator import build_device_collections, process_matrix_assignments
 from .const import (
     CONF_UPDATE_INTERVAL,
     DEFAULT_PORT,
     DEFAULT_UPDATE_INTERVAL,
-    DEVICE_INFO_REFRESH_INTERVAL,
     SSH_HOST_KEY_POLICY,
 )
 from .models.coordinator import CoordinatorData
@@ -82,9 +82,15 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
         # Create API wrapper
         self.api = NHDAPI(self.client)
 
-        # Device info polling control (refresh every N updates since it changes rarely)
-        self._device_info_refresh_interval = DEVICE_INFO_REFRESH_INTERVAL
-        self._update_counter = 0
+    @cache_for_seconds(600)  # Cache device info for 10 minutes
+    async def _get_cached_device_info(self):
+        """Get device info with caching to reduce API calls.
+
+        Device info contains network configuration that rarely changes,
+        so we cache it for 10 minutes to reduce API load.
+        """
+        _LOGGER.debug("Fetching device info from API (will be cached for 10 minutes)...")
+        return await self.api.api_query.config_get_device_info()
 
     async def async_setup(self) -> None:
         """Set up the coordinator and establish connection."""
@@ -147,7 +153,6 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 device_transmitters=self.data.device_transmitters.copy(),
                 device_receivers=self.data.device_receivers.copy(),
                 matrix_assignments=self.data.matrix_assignments.copy(),
-                _device_info_cache=self.data._device_info_cache.copy(),
             )
 
             # Selectively update requested data types
@@ -177,9 +182,9 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
                     device_json_list.append(device_json)
 
                 # Use existing device info cache
-                device_info_list = self.data._device_info_cache
+                device_info_list = await self._get_cached_device_info()
 
-                # Rebuild device collections with fresh status but existing JSON/info
+                # Rebuild device collections with fresh status but cached info
                 transmitters, receivers = build_device_collections(
                     device_json_list, device_status_list, device_info_list
                 )
@@ -202,7 +207,7 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
                     )
                     device_status_list.append(device_status)
 
-                device_info_list = self.data._device_info_cache
+                device_info_list = await self._get_cached_device_info()
 
                 # Rebuild device collections with fresh JSON but existing status/info
                 transmitters, receivers = build_device_collections(
@@ -225,7 +230,6 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
     async def _async_update_data(self) -> CoordinatorData:
         """Fetch data from the device."""
         _LOGGER.debug("Starting data update...")
-        self._update_counter += 1
 
         try:
             # Fetch all required data from API (no retry wrapper since client handles retries)
@@ -241,22 +245,8 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
             _LOGGER.debug("Fetching device status...")
             device_status_list = await self.api.api_query.config_get_device_status()
 
-            # Fetch device info less frequently since network config doesn't change often
-            # This reduces API load by only fetching device info every N updates
-            if self._update_counter % self._device_info_refresh_interval == 1:
-                _LOGGER.debug(
-                    "Fetching device info (scheduled refresh every %d updates)...", self._device_info_refresh_interval
-                )
-                device_info_list = await self.api.api_query.config_get_device_info()
-            else:
-                # Reuse existing device info from coordinator data if available
-                if self.data and hasattr(self.data, "_device_info_cache"):
-                    device_info_list = self.data._device_info_cache
-                    _LOGGER.debug("Using cached device info (%d devices)", len(device_info_list))
-                else:
-                    # First run - no cache available yet, need to fetch
-                    _LOGGER.debug("No cached device info available, fetching...")
-                    device_info_list = await self.api.api_query.config_get_device_info()
+            # Use cached device info (automatically cached for 10 minutes)
+            device_info_list = await self._get_cached_device_info()
 
             _LOGGER.debug("Fetching matrix data...")
             matrix = await self.api.api_query.matrix_get()
@@ -290,7 +280,6 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 device_receivers=receivers,
                 matrix_assignments=matrix_assignments,
                 last_update=datetime.now(),
-                _device_info_cache=device_info_list or [],
             )
 
             _LOGGER.debug(
