@@ -1,10 +1,10 @@
 {
   "domain": "wyrestorm_networkhd",
   "name": "WyreStorm NetworkHD",
-  "codeowners": [],
+  "codeowners": ["@Matt-Hadley"],
   "config_flow": true,
   "dependencies": [],
-  "documentation": "",
+  "documentation": "https://github.com/Matt-Hadley/wyrestorm-networkhd-ha",
   "integration_type": "device",
   "iot_class": "local_polling",
   "requirements": ["wyrestorm-networkhd>=2.1.0"],

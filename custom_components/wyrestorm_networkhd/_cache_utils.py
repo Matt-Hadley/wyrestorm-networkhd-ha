@@ -8,11 +8,26 @@ from functools import wraps
 def cache_for_seconds(seconds: int) -> Callable:
     """Cache async function results for specified seconds.
 
+    This decorator provides time-based caching for expensive async operations,
+    particularly useful for API calls that return rarely-changing data.
+
     Args:
-        seconds: Number of seconds to cache the result
+        seconds: Number of seconds to cache the result (e.g., 600 for 10 minutes).
+                Must be positive integer.
 
     Returns:
-        Decorator that caches function results
+        Decorator function that adds caching behavior to async methods.
+
+    Example:
+        @cache_for_seconds(600)  # Cache for 10 minutes
+        async def get_device_info(self):
+            return await self.api.expensive_call()
+
+    Note:
+        - Cache is keyed by function name and arguments
+        - Each decorated method has independent cache storage
+        - Use method.clear_cache() to manually invalidate cache
+        - Memory usage scales with number of unique argument combinations
     """
 
     def decorator(func: Callable) -> Callable:

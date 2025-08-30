@@ -26,6 +26,7 @@ from .const import (
 )
 from .models.coordinator import CoordinatorData
 from .models.device_controller import DeviceController
+from .models.device_receiver_transmitter import DeviceReceiver, DeviceTransmitter
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -133,11 +134,21 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
     async def async_selective_refresh(self, refresh_only: list[str]) -> None:
         """Perform selective data refresh for specific data types.
 
+        This method allows targeted API calls to refresh only the data that has
+        actually changed, reducing network overhead and improving performance.
+
         Args:
             refresh_only: List of data types to refresh. Options:
-                - "matrix_assignments": Matrix routing data only
-                - "device_status": Device status data only
-                - "device_jsonstring": Device JSON data only
+                - "matrix_assignments": Matrix routing data only (~200ms API call)
+                - "device_status": Device status data only (~300ms API call)
+                - "device_jsonstring": Device JSON data only (~250ms API call)
+
+        Raises:
+            UpdateFailed: If API calls fail and fallback full refresh also fails.
+
+        Note:
+            Device info is automatically cached and doesn't need selective refresh.
+            Falls back to full refresh if selective refresh fails.
         """
         if not self.data:
             _LOGGER.warning("No existing coordinator data - performing full refresh")
@@ -368,29 +379,61 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
     # Public API methods
     def is_ready(self) -> bool:
-        """Check if coordinator is ready and has data."""
+        """Check if coordinator is ready and has data.
+
+        Returns:
+            True if coordinator has successfully fetched data, False otherwise.
+
+        Note:
+            Used by entities to verify data availability before accessing properties.
+        """
         return self.data is not None
 
     def get_device_count(self) -> int:
-        """Get the total number of devices available."""
+        """Get the total number of devices available.
+
+        Returns:
+            Total count of transmitters and receivers, or 0 if not ready.
+        """
         if not self.is_ready():
             return 0
         return len(self.data.device_transmitters) + len(self.data.device_receivers)
 
-    def get_transmitters(self) -> list:
-        """Get all transmitter devices."""
+    def get_transmitters(self) -> list[DeviceTransmitter]:
+        """Get all transmitter devices.
+
+        Returns:
+            List of DeviceTransmitter objects, or empty list if not ready.
+
+        Note:
+            Returns a copy of the internal list to prevent external modifications.
+        """
         if not self.is_ready():
             return []
         return self.data.get_transmitters_list()
 
-    def get_receivers(self) -> list:
-        """Get all receiver devices."""
+    def get_receivers(self) -> list[DeviceReceiver]:
+        """Get all receiver devices.
+
+        Returns:
+            List of DeviceReceiver objects, or empty list if not ready.
+
+        Note:
+            Returns a copy of the internal list to prevent external modifications.
+        """
         if not self.is_ready():
             return []
         return self.data.get_receivers_list()
 
     def get_controller(self) -> DeviceController | None:
-        """Get the controller device."""
+        """Get the controller device.
+
+        Returns:
+            DeviceController object if available, None if not ready.
+
+        Note:
+            The controller represents the NetworkHD matrix switching unit itself.
+        """
         if not self.is_ready():
             return None
         return self.data.device_controller

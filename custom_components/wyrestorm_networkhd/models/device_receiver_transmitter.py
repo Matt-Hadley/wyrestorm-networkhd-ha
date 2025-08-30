@@ -40,13 +40,30 @@ class DeviceBase:
 
     # Display methods
     def get_device_display_name(self) -> str:
-        """Get the display name for the device."""
+        """Get the display name for the device.
+
+        Returns:
+            Human-readable device name prioritizing alias over IP over true name.
+            Format: "DeviceType - DisplayName"
+
+        Example:
+            "Receiver - Living Room TV" or "Transmitter - 192.168.1.100"
+        """
         return f"{self.device_type} - {self.alias_name or self.ip or self.true_name}"
 
 
 @dataclass
 class DeviceReceiver(DeviceBase):
-    """Model representing a WyreStorm NetworkHD Receiver device."""
+    """Model representing a WyreStorm NetworkHD Receiver device.
+
+    Receivers (decoders) receive video streams from transmitters and output
+    to connected displays. They support power control and audio features.
+
+    Attributes:
+        tx_name: Currently connected transmitter name (if any).
+        audio_bitrate: Current audio stream bitrate in kbps.
+        display_power_status: CEC/RS232/IR display power state.
+    """
 
     # RX specific fields from DeviceJsonString
     tx_name: str | None = None

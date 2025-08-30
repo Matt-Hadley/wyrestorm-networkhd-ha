@@ -1,0 +1,40 @@
+# Service definitions for WyreStorm NetworkHD integration
+set_matrix:
+  name: Set Matrix Routing
+  description: Route video from source to target display(s)
+  fields:
+    source:
+      name: Source Device
+      description: Source device alias name, or leave empty to disconnect
+      required: false
+      example: "Apple TV"
+      selector:
+        text:
+    target:
+      name: Target Device(s)
+      description: Target receiver device alias name(s)
+      required: true
+      example: "Living Room"
+      selector:
+        text:
+
+set_power:
+  name: Control Display Power
+  description: Control power state of displays connected to receivers
+  fields:
+    devices:
+      name: Receiver Devices
+      description: Receiver device true name(s) to control
+      required: true
+      example: "DEC_0A0B0C"
+      selector:
+        text:
+    power_state:
+      name: Power State
+      description: Power state to set (on or off)
+      required: true
+      selector:
+        select:
+          options:
+            - "on"
+            - "off"
