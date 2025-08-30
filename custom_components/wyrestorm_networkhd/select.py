@@ -118,15 +118,10 @@ class WyreStormReceiverSourceSelect(CoordinatorEntity[WyreStormCoordinator], Sel
         try:
             if option == "None":
                 # Disconnect the receiver (set to no source)
-                await self.coordinator.api.media_stream_matrix_switch.matrix_set_null([receiver_alias])
-                _LOGGER.info("Disconnected receiver: %s", receiver_alias)
+                await self.coordinator.set_matrix(None, receiver_alias)
             else:
-                # Use coordinator's matrix switching method for normal sources
+                # Connect the receiver to the selected source
                 await self.coordinator.set_matrix(option, receiver_alias)
-                _LOGGER.info("Set matrix: %s -> %s", option, receiver_alias)
-
-            # Request a selective refresh - only matrix assignments need updating after source change
-            await self.coordinator.async_selective_refresh(["matrix_assignments"])
         except Exception as err:
             _LOGGER.error("Failed to set matrix routing: %s", err)
             raise

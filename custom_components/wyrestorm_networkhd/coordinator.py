@@ -306,38 +306,54 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
             raise UpdateFailed(f"Error communicating with API: {err}") from err
 
     # Service methods
-    async def set_matrix(self, source: str | list[str], target: str | list[str]) -> None:
+    async def set_matrix(self, source: str | list[str] | None, target: str | list[str]) -> None:
         """Set matrix routing with validation.
 
         Args:
-            source: Source device(s) alias name
+            source: Source device(s) alias name, or None to disconnect target(s)
             target: Target device(s) alias name
         """
-        if isinstance(source, str):
-            source = [source]
         if isinstance(target, str):
             target = [target]
 
-        # Validate devices exist by alias name
-        if self.data:
-            valid_source_aliases = {tx.alias_name for tx in self.data.get_transmitters_list()}
-            valid_target_aliases = {rx.alias_name for rx in self.data.get_receivers_list()}
+        # Handle disconnect case (source is None)
+        if source is None:
+            # Validate target devices exist
+            if self.data:
+                valid_target_aliases = {rx.alias_name for rx in self.data.get_receivers_list()}
+                for tgt in target:
+                    if tgt not in valid_target_aliases:
+                        raise ValueError(f"Target device '{tgt}' not found")
 
+            # Disconnect targets (set to no source)
+            await self.api.media_stream_matrix_switch.matrix_set_null(target)
+            _LOGGER.info("Disconnected receivers: %s", target)
+        else:
+            # Handle normal matrix routing
+            if isinstance(source, str):
+                source = [source]
+
+            # Validate devices exist by alias name
+            if self.data:
+                valid_source_aliases = {tx.alias_name for tx in self.data.get_transmitters_list()}
+                valid_target_aliases = {rx.alias_name for rx in self.data.get_receivers_list()}
+
+                for src in source:
+                    if src not in valid_source_aliases:
+                        raise ValueError(f"Source device '{src}' not found")
+
+                for tgt in target:
+                    if tgt not in valid_target_aliases:
+                        raise ValueError(f"Target device '{tgt}' not found")
+
+            # Execute matrix commands using alias names
             for src in source:
-                if src not in valid_source_aliases:
-                    raise ValueError(f"Source device '{src}' not found")
+                await self.api.media_stream_matrix_switch.matrix_set(src, target)
 
-            for tgt in target:
-                if tgt not in valid_target_aliases:
-                    raise ValueError(f"Target device '{tgt}' not found")
-
-        # Execute matrix commands using alias names
-        for src in source:
-            await self.api.media_stream_matrix_switch.matrix_set(src, target)
+            _LOGGER.info("Matrix set successful: %s -> %s", source, target)
 
         # Refresh data - only matrix assignments changed
         await self.async_selective_refresh(["matrix_assignments"])
-        _LOGGER.info("Matrix set successful: %s -> %s", source, target)
 
     async def set_power(self, devices: str | list[str], power_state: str) -> None:
         """Control device power with validation.
