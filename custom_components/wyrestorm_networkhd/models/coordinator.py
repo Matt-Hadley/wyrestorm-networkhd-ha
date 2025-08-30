@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Any
 
 from .device_controller import DeviceController
 from .device_receiver_transmitter import DeviceReceiver, DeviceTransmitter
@@ -29,6 +30,9 @@ class CoordinatorData:
 
     # Metadata
     last_update: datetime = field(default_factory=datetime.now)
+
+    # Cache for device info to reduce API calls
+    _device_info_cache: list[Any] = field(default_factory=list)
 
     def __post_init__(self):
         """Update timestamp after initialization."""

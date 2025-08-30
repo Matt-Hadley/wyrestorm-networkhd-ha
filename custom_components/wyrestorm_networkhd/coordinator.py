@@ -21,6 +21,7 @@ from .const import (
     CONF_UPDATE_INTERVAL,
     DEFAULT_PORT,
     DEFAULT_UPDATE_INTERVAL,
+    DEVICE_INFO_REFRESH_INTERVAL,
     SSH_HOST_KEY_POLICY,
 )
 from .models.coordinator import CoordinatorData
@@ -81,6 +82,10 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
         # Create API wrapper
         self.api = NHDAPI(self.client)
 
+        # Device info polling control (refresh every N updates since it changes rarely)
+        self._device_info_refresh_interval = DEVICE_INFO_REFRESH_INTERVAL
+        self._update_counter = 0
+
     async def async_setup(self) -> None:
         """Set up the coordinator and establish connection."""
         try:
@@ -122,6 +127,7 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
     async def _async_update_data(self) -> CoordinatorData:
         """Fetch data from the device."""
         _LOGGER.debug("Starting data update...")
+        self._update_counter += 1
 
         try:
             # Fetch all required data from API (no retry wrapper since client handles retries)
@@ -137,8 +143,22 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
             _LOGGER.debug("Fetching device status...")
             device_status_list = await self.api.api_query.config_get_device_status()
 
-            _LOGGER.debug("Fetching device info...")
-            device_info_list = await self.api.api_query.config_get_device_info()
+            # Fetch device info less frequently since network config doesn't change often
+            # This reduces API load by only fetching device info every N updates
+            if self._update_counter % self._device_info_refresh_interval == 1:
+                _LOGGER.debug(
+                    "Fetching device info (scheduled refresh every %d updates)...", self._device_info_refresh_interval
+                )
+                device_info_list = await self.api.api_query.config_get_device_info()
+            else:
+                # Reuse existing device info from coordinator data if available
+                if self.data and hasattr(self.data, "_device_info_cache"):
+                    device_info_list = self.data._device_info_cache
+                    _LOGGER.debug("Using cached device info (%d devices)", len(device_info_list))
+                else:
+                    # First run - no cache available yet, need to fetch
+                    _LOGGER.debug("No cached device info available, fetching...")
+                    device_info_list = await self.api.api_query.config_get_device_info()
 
             _LOGGER.debug("Fetching matrix data...")
             matrix = await self.api.api_query.matrix_get()
@@ -172,6 +192,7 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 device_receivers=receivers,
                 matrix_assignments=matrix_assignments,
                 last_update=datetime.now(),
+                _device_info_cache=device_info_list or [],
             )
 
             _LOGGER.debug(
