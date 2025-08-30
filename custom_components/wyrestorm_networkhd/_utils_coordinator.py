@@ -1,4 +1,4 @@
-"""Utility functions for WyreStorm NetworkHD 2 Coordinator."""
+"""Utility functions for WyreStorm NetworkHD Coordinator."""
 
 import logging
 from typing import Any
@@ -28,15 +28,15 @@ def build_device_collections(
     # Create device mapping by true name from device_json (primary source)
     for device_json in device_json_list:
         device_name = device_json.trueName
-        
+
         # Find corresponding status and info
         device_status = next((d for d in device_status_list if d.name == device_name), None)
         device_info = next((d for d in device_info_list if d.name == device_name), None)
-        
+
         if device_status and device_info:
             try:
                 device = create_device_from_wyrestorm_models(device_json, device_status, device_info)
-                
+
                 if device.device_type == "Transmitter":
                     transmitters[device.true_name] = device
                 else:  # Receiver
@@ -70,7 +70,7 @@ def process_matrix_assignments(matrix_response: Any) -> dict[str, str]:
 
     try:
         assignments = matrix_response.assignments or []
-        
+
         for assignment in assignments:
             if hasattr(assignment, "tx") and hasattr(assignment, "rx"):
                 source_alias = assignment.tx

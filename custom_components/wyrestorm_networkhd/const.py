@@ -1,10 +1,10 @@
-"""Constants for the WyreStorm NetworkHD 2 integration."""
+"""Constants for the WyreStorm NetworkHD integration."""
 
 from typing import Final
 
 # Integration metadata
-DOMAIN = "wyrestorm_networkhd_2"
-NAME = "WyreStorm NetworkHD 2"
+DOMAIN = "wyrestorm_networkhd"
+NAME = "WyreStorm NetworkHD"
 VERSION = "2.0.0"
 
 # Configuration keys
@@ -13,14 +13,12 @@ CONF_PORT = "port"
 CONF_USERNAME = "username"
 CONF_PASSWORD = "password"
 CONF_UPDATE_INTERVAL = "update_interval"
-CONF_SSH_TIMEOUT = "ssh_timeout"
 
 # Default values
 DEFAULT_PORT = 10022
 DEFAULT_USERNAME = "wyrestorm"
 DEFAULT_PASSWORD = "networkhd"  # WARNING: Change default credentials for security
 DEFAULT_UPDATE_INTERVAL = 60  # Default to 60 seconds
-DEFAULT_SSH_TIMEOUT = 10  # Default SSH timeout in seconds
 
 # SSH Security Settings
 SSH_HOST_KEY_POLICY = "auto_add"  # Auto-add host keys with warning for usability

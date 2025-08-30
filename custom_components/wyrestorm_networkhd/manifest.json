@@ -1,6 +1,6 @@
 {
-  "domain": "wyrestorm_networkhd_2",
-  "name": "WyreStorm NetworkHD 2",
+  "domain": "wyrestorm_networkhd",
+  "name": "WyreStorm NetworkHD",
   "codeowners": [],
   "config_flow": true,
   "dependencies": [],

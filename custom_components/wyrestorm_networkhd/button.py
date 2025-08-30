@@ -1,4 +1,4 @@
-"""Button platform for WyreStorm NetworkHD 2 integration."""
+"""Button platform for WyreStorm NetworkHD integration."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ async def async_setup_entry(
     config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up WyreStorm NetworkHD 2 button entities."""
+    """Set up WyreStorm NetworkHD button entities."""
     coordinator: WyreStormCoordinator = hass.data[DOMAIN][config_entry.entry_id]
 
     if not coordinator.is_ready():
@@ -62,7 +62,7 @@ class WyreStormReceiverDisplayPowerButton(CoordinatorEntity[WyreStormCoordinator
         super().__init__(coordinator)
         self.device_id = device.true_name
         self.power_state = power_state
-        
+
         # Set entity attributes
         action = "on" if power_state == "on" else "off"
         self._attr_unique_id = f"{DOMAIN}_{self.device_id}_display_power_{action}"
@@ -75,10 +75,7 @@ class WyreStormReceiverDisplayPowerButton(CoordinatorEntity[WyreStormCoordinator
     @property
     def available(self) -> bool:
         """Return True if entity is available."""
-        return (
-            self.coordinator.data is not None
-            and self.device_id in self.coordinator.data.device_receivers
-        )
+        return self.coordinator.data is not None and self.device_id in self.coordinator.data.device_receivers
 
     async def async_press(self) -> None:
         """Handle the button press."""
@@ -100,7 +97,7 @@ class WyreStormReceiverDisplayPowerButton(CoordinatorEntity[WyreStormCoordinator
                 power=self.power_state, rx=receiver_alias
             )
             _LOGGER.info("Set display power %s for receiver %s", self.power_state, receiver_alias)
-            
+
             # Request a refresh to update the state
             await self.coordinator.async_request_refresh()
         except Exception as err:
@@ -141,7 +138,7 @@ class WyreStormControllerRebootButton(CoordinatorEntity[WyreStormCoordinator], B
     ) -> None:
         """Initialize the controller reboot button."""
         super().__init__(coordinator)
-        
+
         # Set entity attributes
         self._attr_unique_id = f"{DOMAIN}_{coordinator.host}_controller_reboot"
         self._attr_name = "Reboot Controller"
@@ -160,7 +157,7 @@ class WyreStormControllerRebootButton(CoordinatorEntity[WyreStormCoordinator], B
         try:
             await self.coordinator.api.other_functions.config_set_reboot()
             _LOGGER.info("Controller reboot initiated")
-            
+
             # Note: Don't request refresh immediately as controller will be rebooting
             # The coordinator will handle reconnection automatically during its next update cycle
         except Exception as err:

@@ -1,4 +1,4 @@
-"""Config flow for WyreStorm NetworkHD 2 integration."""
+"""Config flow for WyreStorm NetworkHD integration."""
 
 from __future__ import annotations
 
@@ -11,14 +11,11 @@ from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_PORT, CONF_USERNA
 from homeassistant.data_entry_flow import FlowResult
 
 from wyrestorm_networkhd import NHDAPI, NetworkHDClientSSH
-from wyrestorm_networkhd.exceptions import NetworkHDError
 
 from .const import (
-    CONF_SSH_TIMEOUT,
     CONF_UPDATE_INTERVAL,
     DEFAULT_PASSWORD,
     DEFAULT_PORT,
-    DEFAULT_SSH_TIMEOUT,
     DEFAULT_UPDATE_INTERVAL,
     DEFAULT_USERNAME,
     DOMAIN,
@@ -31,25 +28,24 @@ _LOGGER = logging.getLogger(__name__)
 def get_config_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
     """Get the configuration schema with optional defaults."""
     defaults = defaults or {}
-    return vol.Schema({
-        vol.Required(CONF_HOST, default=defaults.get(CONF_HOST, "")): str,
-        vol.Required(CONF_USERNAME, default=defaults.get(CONF_USERNAME, DEFAULT_USERNAME)): str,
-        vol.Required(CONF_PASSWORD, default=defaults.get(CONF_PASSWORD, DEFAULT_PASSWORD)): str,
-        vol.Optional(CONF_PORT, default=defaults.get(CONF_PORT, DEFAULT_PORT)): int,
-        vol.Optional(CONF_SSH_TIMEOUT, default=defaults.get(CONF_SSH_TIMEOUT, DEFAULT_SSH_TIMEOUT)): vol.All(
-            int, vol.Range(min=5, max=60)
-        ),
-        vol.Optional(CONF_UPDATE_INTERVAL, default=defaults.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)): vol.All(
-            int, vol.Range(min=10, max=300)
-        ),
-    })
+    return vol.Schema(
+        {
+            vol.Required(CONF_HOST, default=defaults.get(CONF_HOST, "")): str,
+            vol.Required(CONF_USERNAME, default=defaults.get(CONF_USERNAME, DEFAULT_USERNAME)): str,
+            vol.Required(CONF_PASSWORD, default=defaults.get(CONF_PASSWORD, DEFAULT_PASSWORD)): str,
+            vol.Optional(CONF_PORT, default=defaults.get(CONF_PORT, DEFAULT_PORT)): int,
+            vol.Optional(
+                CONF_UPDATE_INTERVAL, default=defaults.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
+            ): vol.All(int, vol.Range(min=10, max=300)),
+        }
+    )
 
 
 async def test_connection(user_input: dict[str, Any]) -> dict[str, str]:
     """Test connection to the controller and return any errors."""
     errors = {}
     client = None
-    
+
     try:
         client = NetworkHDClientSSH(
             host=user_input[CONF_HOST],
@@ -57,7 +53,6 @@ async def test_connection(user_input: dict[str, Any]) -> dict[str, str]:
             username=user_input[CONF_USERNAME],
             password=user_input[CONF_PASSWORD],
             ssh_host_key_policy=SSH_HOST_KEY_POLICY,
-            timeout=user_input.get(CONF_SSH_TIMEOUT, DEFAULT_SSH_TIMEOUT),
         )
 
         await client.connect()
@@ -73,12 +68,12 @@ async def test_connection(user_input: dict[str, Any]) -> dict[str, str]:
                 await client.disconnect()
             except Exception as disconnect_err:
                 _LOGGER.debug("Error disconnecting client: %s", disconnect_err)
-    
+
     return errors
 
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for WyreStorm NetworkHD 2."""
+    """Handle a config flow for WyreStorm NetworkHD."""
 
     VERSION = 1
 
@@ -96,7 +91,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors = await test_connection(user_input)
             if not errors:
                 return self.async_create_entry(
-                    title=f"WyreStorm NetworkHD 2 ({user_input[CONF_HOST]})",
+                    title=f"WyreStorm NetworkHD ({user_input[CONF_HOST]})",
                     data=user_input,
                 )
         else:
@@ -111,14 +106,14 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_reconfigure(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         """Handle reconfiguration of the integration."""
         entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
-        
+
         if user_input is not None:
             errors = await test_connection(user_input)
             if not errors:
                 self.hass.config_entries.async_update_entry(
                     entry,
                     data=user_input,
-                    title=f"WyreStorm NetworkHD 2 ({user_input[CONF_HOST]})",
+                    title=f"WyreStorm NetworkHD ({user_input[CONF_HOST]})",
                 )
                 await self.hass.config_entries.async_reload(entry.entry_id)
                 return self.async_abort(reason="reconfigure_successful")
@@ -133,7 +128,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 
 class OptionsFlow(config_entries.OptionsFlow):
-    """Handle options flow for WyreStorm NetworkHD 2 integration."""
+    """Handle options flow for WyreStorm NetworkHD integration."""
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         """Initialize options flow."""
@@ -146,7 +141,7 @@ class OptionsFlow(config_entries.OptionsFlow):
             self.hass.config_entries.async_update_entry(
                 self.config_entry,
                 data=new_data,
-                title=f"WyreStorm NetworkHD 2 ({new_data[CONF_HOST]})",
+                title=f"WyreStorm NetworkHD ({new_data[CONF_HOST]})",
             )
             await self.hass.config_entries.async_reload(self.config_entry.entry_id)
             return self.async_create_entry(title="", data={})

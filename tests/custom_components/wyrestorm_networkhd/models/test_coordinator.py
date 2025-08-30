@@ -1,25 +1,23 @@
-"""Unit tests for CoordinatorData model."""
+"""Comprehensive unit tests for CoordinatorData model."""
 
 from datetime import datetime
 from unittest.mock import patch
 
 import pytest
 
-from custom_components.wyrestorm_networkhd_2.models.coordinator import CoordinatorData
-from custom_components.wyrestorm_networkhd_2.models.device_receiver_transmitter import (
-    DeviceReceiver,
-    DeviceTransmitter,
-)
-from ._fixtures import (
-    device_controller_fixture,
-    device_receiver_fixture,
-    device_transmitter_fixture,
+from custom_components.wyrestorm_networkhd.models.coordinator import CoordinatorData
+from .._fixtures import (
     coordinator_data_fixture,
+    device_controller_fixture,
+    device_receiver_bedroom_fixture,
+    device_receiver_fixture,
+    device_receiver_updated_fixture,
+    device_transmitter_fixture,
 )
 
 
 class TestCoordinatorData:
-    """Tests for CoordinatorData model."""
+    """Comprehensive test suite for CoordinatorData model."""
 
     def test_init(self, device_controller_fixture):
         """Test initialization of CoordinatorData."""
@@ -31,7 +29,7 @@ class TestCoordinatorData:
         assert coordinator_data.matrix_assignments == {}
         assert isinstance(coordinator_data.last_update, datetime)
 
-    @patch("custom_components.wyrestorm_networkhd_2.models.coordinator.datetime")
+    @patch("custom_components.wyrestorm_networkhd.models.coordinator.datetime")
     def test_post_init_updates_timestamp(self, mock_datetime, device_controller_fixture):
         """Test that __post_init__ updates the timestamp."""
         mock_now = datetime(2023, 1, 1, 12, 0, 0)
@@ -77,26 +75,15 @@ class TestCoordinatorData:
         )
         assert len(coordinator_data_fixture.device_receivers) == 0
 
-    def test_update_device_existing_receiver(self, coordinator_data_fixture, device_receiver_fixture):
+    def test_update_device_existing_receiver(
+        self, coordinator_data_fixture, device_receiver_fixture, device_receiver_updated_fixture
+    ):
         """Test updating an existing receiver."""
         # Add the receiver first
         coordinator_data_fixture.update_device(device_receiver_fixture)
 
-        # Create a modified version
-        updated_receiver = DeviceReceiver(
-            alias_name="Updated Living Room RX",
-            true_name=device_receiver_fixture.true_name,  # Same true_name
-            device_type="Receiver",
-            ip="192.168.1.201",  # Different IP
-            online=False,  # Different online status
-            sequence=1,
-            mac="AA:BB:CC:DD:EE:01",
-            gateway="192.168.1.1",
-            netmask="255.255.255.0",
-            version="1.2.3",
-            edid="Custom EDID",
-            ip_mode="static",
-        )
+        # Use the updated version from fixture
+        updated_receiver = device_receiver_updated_fixture
 
         was_existing = coordinator_data_fixture.update_device(updated_receiver)
 
@@ -109,7 +96,7 @@ class TestCoordinatorData:
         assert coordinator_data_fixture.device_receivers[device_receiver_fixture.true_name].ip == "192.168.1.201"
         assert coordinator_data_fixture.device_receivers[device_receiver_fixture.true_name].online is False
 
-    @patch("custom_components.wyrestorm_networkhd_2.models.coordinator.datetime")
+    @patch("custom_components.wyrestorm_networkhd.models.coordinator.datetime")
     def test_update_device_updates_timestamp(self, mock_datetime, coordinator_data_fixture, device_receiver_fixture):
         """Test that update_device updates the timestamp."""
         mock_now = datetime(2023, 1, 1, 13, 0, 0)
@@ -159,7 +146,7 @@ class TestCoordinatorData:
 
         assert was_removed is False
 
-    @patch("custom_components.wyrestorm_networkhd_2.models.coordinator.datetime")
+    @patch("custom_components.wyrestorm_networkhd.models.coordinator.datetime")
     def test_remove_device_updates_timestamp_when_successful(
         self, mock_datetime, coordinator_data_fixture, device_receiver_fixture
     ):
@@ -176,7 +163,7 @@ class TestCoordinatorData:
         assert coordinator_data_fixture.last_update == mock_now
         mock_datetime.now.assert_called()
 
-    @patch("custom_components.wyrestorm_networkhd_2.models.coordinator.datetime")
+    @patch("custom_components.wyrestorm_networkhd.models.coordinator.datetime")
     def test_remove_device_does_not_update_timestamp_when_not_found(self, mock_datetime, coordinator_data_fixture):
         """Test that remove_device does not update timestamp when device not found."""
         original_timestamp = coordinator_data_fixture.last_update
@@ -204,37 +191,12 @@ class TestCoordinatorData:
         assert len(transmitters) == 1
         assert transmitters[0] is device_transmitter_fixture
 
-    def test_multiple_devices_same_type(self, coordinator_data_fixture):
+    def test_multiple_devices_same_type(
+        self, coordinator_data_fixture, device_receiver_fixture, device_receiver_bedroom_fixture
+    ):
         """Test managing multiple devices of the same type."""
-        receiver1 = DeviceReceiver(
-            alias_name="Living Room RX",
-            true_name="NHD-200-RX-01",
-            device_type="Receiver",
-            ip="192.168.1.101",
-            online=True,
-            sequence=1,
-            mac="AA:BB:CC:DD:EE:01",
-            gateway="192.168.1.1",
-            netmask="255.255.255.0",
-            version="1.2.3",
-            edid="Custom EDID",
-            ip_mode="static",
-        )
-
-        receiver2 = DeviceReceiver(
-            alias_name="Bedroom RX",
-            true_name="NHD-200-RX-02",
-            device_type="Receiver",
-            ip="192.168.1.103",
-            online=True,
-            sequence=3,
-            mac="AA:BB:CC:DD:EE:03",
-            gateway="192.168.1.1",
-            netmask="255.255.255.0",
-            version="1.2.3",
-            edid="Custom EDID",
-            ip_mode="static",
-        )
+        receiver1 = device_receiver_fixture
+        receiver2 = device_receiver_bedroom_fixture
 
         # Add both receivers
         coordinator_data_fixture.update_device(receiver1)
@@ -296,7 +258,7 @@ class TestCoordinatorData:
         assert coordinator_data_fixture.matrix_assignments["Living Room RX"] == "Apple TV"
         assert len(coordinator_data_fixture.matrix_assignments) == 1
 
-    @patch("custom_components.wyrestorm_networkhd_2.models.coordinator.datetime")
+    @patch("custom_components.wyrestorm_networkhd.models.coordinator.datetime")
     def test_update_matrix_assignment_updates_timestamp(self, mock_datetime, coordinator_data_fixture):
         """Test that update_matrix_assignment updates the timestamp."""
         mock_now = datetime(2023, 1, 1, 15, 0, 0)
@@ -327,7 +289,7 @@ class TestCoordinatorData:
         assert was_removed is False
         assert len(coordinator_data_fixture.matrix_assignments) == 0
 
-    @patch("custom_components.wyrestorm_networkhd_2.models.coordinator.datetime")
+    @patch("custom_components.wyrestorm_networkhd.models.coordinator.datetime")
     def test_remove_matrix_assignment_updates_timestamp_when_successful(self, mock_datetime, coordinator_data_fixture):
         """Test that remove_matrix_assignment updates timestamp when successful."""
         # Add assignment first
@@ -342,7 +304,7 @@ class TestCoordinatorData:
         assert coordinator_data_fixture.last_update == mock_now
         mock_datetime.now.assert_called()
 
-    @patch("custom_components.wyrestorm_networkhd_2.models.coordinator.datetime")
+    @patch("custom_components.wyrestorm_networkhd.models.coordinator.datetime")
     def test_remove_matrix_assignment_does_not_update_timestamp_when_not_found(
         self, mock_datetime, coordinator_data_fixture
     ):

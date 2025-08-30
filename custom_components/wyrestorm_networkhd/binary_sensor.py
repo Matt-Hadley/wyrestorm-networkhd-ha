@@ -1,4 +1,4 @@
-"""Binary sensors for WyreStorm NetworkHD 2 integration."""
+"""Binary sensors for WyreStorm NetworkHD integration."""
 
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up WyreStorm NetworkHD 2 binary sensors."""
+    """Set up WyreStorm NetworkHD binary sensors."""
     coordinator: WyreStormCoordinator = hass.data[DOMAIN][entry.entry_id]
 
     if not coordinator.is_ready():
@@ -65,14 +65,14 @@ class WyreStormControllerLinkSensor(CoordinatorEntity[WyreStormCoordinator], Bin
         super().__init__(coordinator)
         self.device_id = device.true_name
         self.device_class_str = device_class
-        
+
         # Set entity attributes
         self._attr_unique_id = f"{DOMAIN}_{self.device_id}_controller_link"
         self._attr_name = "Controller Link"
         self._attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
         self._attr_entity_category = EntityCategory.DIAGNOSTIC
         self._attr_has_entity_name = True
-        
+
         # Set device info
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, self.device_id)},
@@ -88,16 +88,16 @@ class WyreStormControllerLinkSensor(CoordinatorEntity[WyreStormCoordinator], Bin
         """Return True if device has controller link (is online)."""
         if not self.coordinator.data:
             return None
-            
+
         # Check in transmitters or receivers based on device class
         if self.device_class_str == "transmitter":
             device = self.coordinator.data.device_transmitters.get(self.device_id)
         else:  # receiver
             device = self.coordinator.data.device_receivers.get(self.device_id)
-            
+
         if device:
             return device.online
-            
+
         return None
 
     @property
@@ -111,16 +111,16 @@ class WyreStormControllerLinkSensor(CoordinatorEntity[WyreStormCoordinator], Bin
         """Return additional state attributes."""
         if not self.coordinator.data:
             return {}
-            
+
         # Get device from appropriate collection
         if self.device_class_str == "transmitter":
             device = self.coordinator.data.device_transmitters.get(self.device_id)
         else:  # receiver
             device = self.coordinator.data.device_receivers.get(self.device_id)
-            
+
         if not device:
             return {}
-            
+
         return {
             "device_type": device.device_type,
             "ip_address": device.ip,
@@ -140,7 +140,7 @@ class WyreStormVideoInputSensor(CoordinatorEntity[WyreStormCoordinator], BinaryS
         """Initialize the video input sensor."""
         super().__init__(coordinator)
         self.device_id = device.true_name
-        
+
         # Set entity attributes
         self._attr_unique_id = f"{DOMAIN}_{self.device_id}_video_input"
         self._attr_name = "Video Input"
@@ -154,35 +154,32 @@ class WyreStormVideoInputSensor(CoordinatorEntity[WyreStormCoordinator], BinaryS
         """Return True if video input is active (HDMI in frame rate > 0)."""
         if not self.coordinator.data:
             return None
-            
+
         device = self.coordinator.data.device_transmitters.get(self.device_id)
-        if device and hasattr(device, 'hdmi_in_frame_rate'):
+        if device and hasattr(device, "hdmi_in_frame_rate"):
             try:
                 frame_rate = float(device.hdmi_in_frame_rate or 0)
                 return frame_rate > 0
             except (ValueError, TypeError):
                 return False
-            
+
         return None
 
     @property
     def available(self) -> bool:
         """Return True if entity is available."""
-        return (
-            self.coordinator.data is not None
-            and self.device_id in self.coordinator.data.device_transmitters
-        )
+        return self.coordinator.data is not None and self.device_id in self.coordinator.data.device_transmitters
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return additional state attributes."""
         if not self.coordinator.data:
             return {}
-            
+
         device = self.coordinator.data.device_transmitters.get(self.device_id)
         if not device:
             return {}
-            
+
         return {
             "hdmi_in_frame_rate": device.hdmi_in_frame_rate,
         }
@@ -199,7 +196,7 @@ class WyreStormVideoOutputSensor(CoordinatorEntity[WyreStormCoordinator], Binary
         """Initialize the video output sensor."""
         super().__init__(coordinator)
         self.device_id = device.true_name
-        
+
         # Set entity attributes
         self._attr_unique_id = f"{DOMAIN}_{self.device_id}_video_output"
         self._attr_name = "Video Output"
@@ -213,35 +210,32 @@ class WyreStormVideoOutputSensor(CoordinatorEntity[WyreStormCoordinator], Binary
         """Return True if video output is active (HDMI out frame rate > 0)."""
         if not self.coordinator.data:
             return None
-            
+
         device = self.coordinator.data.device_receivers.get(self.device_id)
-        if device and hasattr(device, 'hdmi_out_frame_rate'):
+        if device and hasattr(device, "hdmi_out_frame_rate"):
             try:
                 frame_rate = float(device.hdmi_out_frame_rate or 0)
                 return frame_rate > 0
             except (ValueError, TypeError):
                 return False
-            
+
         return None
 
     @property
     def available(self) -> bool:
         """Return True if entity is available."""
-        return (
-            self.coordinator.data is not None
-            and self.device_id in self.coordinator.data.device_receivers
-        )
+        return self.coordinator.data is not None and self.device_id in self.coordinator.data.device_receivers
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return additional state attributes."""
         if not self.coordinator.data:
             return {}
-            
+
         device = self.coordinator.data.device_receivers.get(self.device_id)
         if not device:
             return {}
-            
+
         return {
             "hdmi_out_frame_rate": device.hdmi_out_frame_rate,
         }

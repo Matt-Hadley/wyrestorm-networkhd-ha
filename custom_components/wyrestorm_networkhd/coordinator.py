@@ -1,39 +1,36 @@
-"""WyreStorm NetworkHD 2 Coordinator.
+"""WyreStorm NetworkHD Coordinator.
 
-This module provides the main data coordinator for the WyreStorm NetworkHD 2
+This module provides the main data coordinator for the WyreStorm NetworkHD
 Home Assistant integration using the new model structure.
 """
 
 import asyncio
 import logging
+from contextlib import suppress
 from datetime import datetime, timedelta
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_PORT, CONF_USERNAME
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from wyrestorm_networkhd import NHDAPI, NetworkHDClientSSH
 
+from ._utils_coordinator import build_device_collections, process_matrix_assignments
 from .const import (
-    CONF_SSH_TIMEOUT,
     CONF_UPDATE_INTERVAL,
     DEFAULT_PORT,
-    DEFAULT_SSH_TIMEOUT,
     DEFAULT_UPDATE_INTERVAL,
-    DOMAIN,
     SSH_HOST_KEY_POLICY,
 )
 from .models.coordinator import CoordinatorData
 from .models.device_controller import DeviceController
-from ._utils_coordinator import build_device_collections, process_matrix_assignments
 
 _LOGGER = logging.getLogger(__name__)
 
 
 class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
-    """WyreStorm NetworkHD 2 data coordinator.
+    """WyreStorm NetworkHD data coordinator.
 
     Manages data fetching and device state synchronization for WyreStorm NetworkHD
     matrix switching systems using the new model structure.
@@ -66,12 +63,12 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
         super().__init__(
             hass,
             _LOGGER,
-            name="WyreStorm NetworkHD 2",
+            name="WyreStorm NetworkHD",
             update_interval=timedelta(seconds=entry.data.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)),
         )
         self.entry = entry
         self.host = entry.data[CONF_HOST]
-        
+
         # Create SSH client from entry data
         self.client = NetworkHDClientSSH(
             host=self.host,
@@ -79,9 +76,8 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
             username=entry.data[CONF_USERNAME],
             password=entry.data[CONF_PASSWORD],
             ssh_host_key_policy=SSH_HOST_KEY_POLICY,
-            timeout=entry.data.get(CONF_SSH_TIMEOUT, DEFAULT_SSH_TIMEOUT),
         )
-        
+
         # Create API wrapper
         self.api = NHDAPI(self.client)
 
@@ -98,16 +94,14 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
             # Initial data fetch using built-in method
             await self.async_config_entry_first_refresh()
 
-            _LOGGER.info("WyreStorm NetworkHD 2 coordinator setup complete")
+            _LOGGER.info("WyreStorm NetworkHD coordinator setup complete")
 
         except Exception as err:
             _LOGGER.error("Coordinator setup failed: %s", err)
             # Ensure cleanup on failure
             if self.client and self.client.is_connected():
-                try:
+                with suppress(Exception):
                     await self.client.disconnect()
-                except Exception:
-                    pass
             raise
 
     async def async_shutdown(self) -> None:
@@ -123,7 +117,7 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
             except Exception as err:
                 _LOGGER.warning("Error disconnecting client: %s", err)
 
-        _LOGGER.info("WyreStorm NetworkHD 2 coordinator shutdown complete")
+        _LOGGER.info("WyreStorm NetworkHD coordinator shutdown complete")
 
     async def _async_update_data(self) -> CoordinatorData:
         """Fetch data from the device."""
@@ -190,12 +184,12 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
         except Exception as err:
             _LOGGER.error("Data update failed: %s", err)
-            raise UpdateFailed(f"Error communicating with API: {err}")
+            raise UpdateFailed(f"Error communicating with API: {err}") from err
 
     # Service methods
     async def set_matrix(self, source: str | list[str], target: str | list[str]) -> None:
         """Set matrix routing with validation.
-        
+
         Args:
             source: Source device(s) alias name
             target: Target device(s) alias name
@@ -204,55 +198,53 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
             source = [source]
         if isinstance(target, str):
             target = [target]
-            
+
         # Validate devices exist by alias name
         if self.data:
             valid_source_aliases = {tx.alias_name for tx in self.data.get_transmitters_list()}
             valid_target_aliases = {rx.alias_name for rx in self.data.get_receivers_list()}
-            
+
             for src in source:
                 if src not in valid_source_aliases:
                     raise ValueError(f"Source device '{src}' not found")
-            
+
             for tgt in target:
                 if tgt not in valid_target_aliases:
                     raise ValueError(f"Target device '{tgt}' not found")
-        
+
         # Execute matrix commands using alias names
         for src in source:
             await self.api.media_stream_matrix_switch.matrix_set(src, target)
-        
+
         # Refresh data
         await self.async_request_refresh()
         _LOGGER.info("Matrix set successful: %s -> %s", source, target)
 
     async def set_power(self, devices: str | list[str], power_state: str) -> None:
         """Control device power with validation.
-        
+
         Args:
             devices: Device(s) true name
             power_state: "on" or "off"
         """
         if isinstance(devices, str):
             devices = [devices]
-        
+
         if power_state not in ["on", "off"]:
             raise ValueError(f"Invalid power state: {power_state}")
-        
+
         # Validate devices exist and are receivers
         if self.data:
             valid_receivers = set(self.data.device_receivers.keys())
-            
+
             for device in devices:
                 if device not in valid_receivers:
                     raise ValueError(f"Device '{device}' not found or does not support power control")
-        
+
         # Send power commands
         for device in devices:
-            await self.api.connected_device_control.config_set_device_sinkpower(
-                power=power_state, rx=device
-            )
-        
+            await self.api.connected_device_control.config_set_device_sinkpower(power=power_state, rx=device)
+
         # Refresh data
         await self.async_request_refresh()
         _LOGGER.info("Power control successful: %s -> %s", devices, power_state)
@@ -305,15 +297,3 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
                     _LOGGER.debug("Refresh attempt failed: %s", err)
 
         return self.is_ready()
-
-    @property
-    def device_info(self) -> dr.DeviceInfo:
-        """Return device info for the main hub."""
-        return dr.DeviceInfo(
-            identifiers={(DOMAIN, self.host)},
-            name=f"WyreStorm NetworkHD 2 ({self.host})",
-            manufacturer="WyreStorm",
-            model="NetworkHD Controller",
-            sw_version=self.data.device_controller.version if self.data else None,
-            configuration_url=f"http://{self.host}",
-        )

@@ -1,4 +1,4 @@
-"""WyreStorm NetworkHD 2 integration for Home Assistant."""
+"""WyreStorm NetworkHD integration for Home Assistant."""
 
 from __future__ import annotations
 
@@ -24,20 +24,24 @@ from .coordinator import WyreStormCoordinator
 _LOGGER = logging.getLogger(__name__)
 
 # Service schemas
-MATRIX_SET_SCHEMA = vol.Schema({
-    vol.Required(ATTR_SOURCE_DEVICE): vol.Union(str, [str]),
-    vol.Required(ATTR_TARGET_DEVICE): vol.Union(str, [str]),
-})
+MATRIX_SET_SCHEMA = vol.Schema(
+    {
+        vol.Required(ATTR_SOURCE_DEVICE): vol.Union(str, [str]),
+        vol.Required(ATTR_TARGET_DEVICE): vol.Union(str, [str]),
+    }
+)
 
-POWER_CONTROL_SCHEMA = vol.Schema({
-    vol.Required(ATTR_DEVICES): vol.Union(str, [str]),
-    vol.Required("power_state"): vol.In(["on", "off"]),
-})
+POWER_CONTROL_SCHEMA = vol.Schema(
+    {
+        vol.Required(ATTR_DEVICES): vol.Union(str, [str]),
+        vol.Required("power_state"): vol.In(["on", "off"]),
+    }
+)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up WyreStorm NetworkHD 2 from a config entry."""
-    _LOGGER.debug("Setting up WyreStorm NetworkHD 2 integration")
+    """Set up WyreStorm NetworkHD from a config entry."""
+    _LOGGER.debug("Setting up WyreStorm NetworkHD integration")
 
     # Create coordinator with the config entry
     coordinator = WyreStormCoordinator(hass, entry)
@@ -59,7 +63,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     device_registry.async_get_or_create(
         config_entry_id=entry.entry_id,
         identifiers={(DOMAIN, coordinator.host)},
-        name=f"WyreStorm NetworkHD 2 ({coordinator.host})",
+        name=f"WyreStorm NetworkHD ({coordinator.host})",
         manufacturer="WyreStorm",
         model="NetworkHD Controller",
         sw_version=coordinator.data.device_controller.core_version if coordinator.data else None,
@@ -73,7 +77,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Register services
     _register_services(hass)
 
-    _LOGGER.info("WyreStorm NetworkHD 2 integration setup complete")
+    _LOGGER.info("WyreStorm NetworkHD integration setup complete")
     return True
 
 
@@ -103,19 +107,13 @@ def _register_services(hass: HomeAssistant) -> None:
         """Handle matrix set service call."""
         # Get first available coordinator (services are domain-wide)
         coordinator = next(iter(hass.data[DOMAIN].values()))
-        await coordinator.set_matrix(
-            call.data[ATTR_SOURCE_DEVICE],
-            call.data[ATTR_TARGET_DEVICE]
-        )
+        await coordinator.set_matrix(call.data[ATTR_SOURCE_DEVICE], call.data[ATTR_TARGET_DEVICE])
 
     async def handle_power_control(call: ServiceCall) -> None:
         """Handle power control service call."""
         # Get first available coordinator (services are domain-wide)
         coordinator = next(iter(hass.data[DOMAIN].values()))
-        await coordinator.set_power(
-            call.data[ATTR_DEVICES],
-            call.data["power_state"]
-        )
+        await coordinator.set_power(call.data[ATTR_DEVICES], call.data["power_state"])
 
     hass.services.async_register(DOMAIN, SERVICE_MATRIX_SET, handle_matrix_set, schema=MATRIX_SET_SCHEMA)
     hass.services.async_register(DOMAIN, SERVICE_POWER_CONTROL, handle_power_control, schema=POWER_CONTROL_SCHEMA)

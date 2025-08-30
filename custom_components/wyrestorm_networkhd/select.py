@@ -1,4 +1,4 @@
-"""Select platform for WyreStorm NetworkHD 2 integration."""
+"""Select platform for WyreStorm NetworkHD integration."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ async def async_setup_entry(
     config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up WyreStorm NetworkHD 2 select entities."""
+    """Set up WyreStorm NetworkHD select entities."""
     coordinator: WyreStormCoordinator = hass.data[DOMAIN][config_entry.entry_id]
 
     if not coordinator.is_ready():
@@ -45,7 +45,7 @@ async def async_setup_entry(
 
 
 class WyreStormReceiverSourceSelect(CoordinatorEntity[WyreStormCoordinator], SelectEntity):
-    """Representation of a WyreStorm NetworkHD 2 receiver source selection."""
+    """Representation of a WyreStorm NetworkHD receiver source selection."""
 
     def __init__(
         self,
@@ -55,7 +55,7 @@ class WyreStormReceiverSourceSelect(CoordinatorEntity[WyreStormCoordinator], Sel
         """Initialize the source select entity."""
         super().__init__(coordinator)
         self.device_id = device.true_name
-        
+
         # Set entity attributes
         self._attr_unique_id = f"{DOMAIN}_{self.device_id}_source"
         self._attr_name = "Input Source"
@@ -69,16 +69,16 @@ class WyreStormReceiverSourceSelect(CoordinatorEntity[WyreStormCoordinator], Sel
         """Return the currently selected source."""
         if not self.coordinator.data:
             return None
-            
+
         # Check matrix assignments to see what's connected to this receiver
         receiver_alias = None
         if self.device_id in self.coordinator.data.device_receivers:
             receiver = self.coordinator.data.device_receivers[self.device_id]
             receiver_alias = receiver.alias_name
-        
+
         if not receiver_alias:
             return None
-            
+
         # Look up current assignment
         current_source_alias = self.coordinator.data.matrix_assignments.get(receiver_alias)
 
@@ -98,10 +98,7 @@ class WyreStormReceiverSourceSelect(CoordinatorEntity[WyreStormCoordinator], Sel
     @property
     def available(self) -> bool:
         """Return True if entity is available."""
-        return (
-            self.coordinator.data is not None
-            and self.device_id in self.coordinator.data.device_receivers
-        )
+        return self.coordinator.data is not None and self.device_id in self.coordinator.data.device_receivers
 
     async def async_select_option(self, option: str) -> None:
         """Change the selected source."""
