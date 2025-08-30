@@ -1,3 +1,4 @@
+# ruff: noqa: F811
 """Comprehensive unit tests for CoordinatorData model."""
 
 from datetime import datetime
@@ -6,7 +7,8 @@ from unittest.mock import patch
 import pytest
 
 from custom_components.wyrestorm_networkhd.models.coordinator import CoordinatorData
-from .._fixtures import (
+
+from .._fixtures import (  # noqa: F401
     coordinator_data_fixture,
     device_controller_fixture,
     device_receiver_bedroom_fixture,

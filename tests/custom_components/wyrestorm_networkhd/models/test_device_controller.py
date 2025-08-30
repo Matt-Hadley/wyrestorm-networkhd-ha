@@ -1,3 +1,4 @@
+# ruff: noqa: F811
 """Unit tests for the DeviceController model.
 
 This module contains comprehensive tests for the DeviceController class,
@@ -15,7 +16,8 @@ Test Categories:
 from custom_components.wyrestorm_networkhd.models.device_controller import (
     DeviceController,
 )
-from .._fixtures import (
+
+from .._fixtures import (  # noqa: F401
     alternative_ip_setting_fixture,
     alternative_version_fixture,
     device_controller_display_name_test_cases,

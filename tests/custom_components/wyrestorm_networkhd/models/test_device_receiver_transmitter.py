@@ -1,3 +1,4 @@
+# ruff: noqa: F811
 """Comprehensive unit tests for DeviceReceiver and DeviceTransmitter models."""
 
 import pytest
@@ -8,7 +9,8 @@ from custom_components.wyrestorm_networkhd.models.device_receiver_transmitter im
     DeviceTransmitter,
     create_device_from_wyrestorm_models,
 )
-from .._fixtures import (
+
+from .._fixtures import (  # noqa: F401
     device_info_receiver_fixture,
     device_info_transmitter_fixture,
     device_json_receiver_fixture,
