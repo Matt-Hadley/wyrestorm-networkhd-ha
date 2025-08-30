@@ -124,6 +124,78 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
         _LOGGER.info("WyreStorm NetworkHD coordinator shutdown complete")
 
+    async def async_selective_refresh(self, refresh_only: list[str]) -> None:
+        """Perform selective data refresh for specific data types.
+
+        Args:
+            refresh_only: List of data types to refresh. Options:
+                - "matrix_assignments": Matrix routing data only
+                - "device_status": Device status data only
+        """
+        if not self.data:
+            _LOGGER.warning("No existing coordinator data - performing full refresh")
+            await self.async_request_refresh()
+            return
+
+        try:
+            _LOGGER.debug("Starting selective data refresh for: %s", refresh_only)
+
+            # Start with existing data
+            updated_data = CoordinatorData(
+                device_controller=self.data.device_controller,
+                device_transmitters=self.data.device_transmitters.copy(),
+                device_receivers=self.data.device_receivers.copy(),
+                matrix_assignments=self.data.matrix_assignments.copy(),
+                _device_info_cache=self.data._device_info_cache.copy(),
+            )
+
+            # Selectively update requested data types
+            if "matrix_assignments" in refresh_only:
+                _LOGGER.debug("Refreshing matrix assignments...")
+                matrix = await self.api.api_query.matrix_get()
+                updated_data.matrix_assignments = process_matrix_assignments(matrix)
+
+            if "device_status" in refresh_only:
+                _LOGGER.debug("Refreshing device status only...")
+                device_status_list = await self.api.api_query.config_get_device_status()
+
+                # Reconstruct device JSON from existing device data (no API call needed)
+                device_json_list = []
+                for device in list(self.data.device_transmitters.values()) + list(self.data.device_receivers.values()):
+                    from wyrestorm_networkhd.models.api_query import DeviceJsonString
+
+                    device_json = DeviceJsonString(
+                        aliasName=device.alias_name,
+                        deviceType=device.device_type,
+                        ip=device.ip,
+                        online=device.online,  # This will be updated from fresh status if changed
+                        sequence=device.sequence,
+                        trueName=device.true_name,
+                        group="",  # Default empty group
+                    )
+                    device_json_list.append(device_json)
+
+                # Use existing device info cache
+                device_info_list = self.data._device_info_cache
+
+                # Rebuild device collections with fresh status but existing JSON/info
+                transmitters, receivers = build_device_collections(
+                    device_json_list, device_status_list, device_info_list
+                )
+                updated_data.device_transmitters = transmitters
+                updated_data.device_receivers = receivers
+
+            # Update timestamp and set data
+            updated_data.last_update = datetime.now()
+            self.async_set_updated_data(updated_data)
+
+            _LOGGER.debug("Selective refresh completed for: %s", refresh_only)
+
+        except Exception as err:
+            _LOGGER.error("Selective refresh failed: %s", err)
+            # Fall back to full refresh on error
+            await self.async_request_refresh()
+
     async def _async_update_data(self) -> CoordinatorData:
         """Fetch data from the device."""
         _LOGGER.debug("Starting data update...")
@@ -237,8 +309,8 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
         for src in source:
             await self.api.media_stream_matrix_switch.matrix_set(src, target)
 
-        # Refresh data
-        await self.async_request_refresh()
+        # Refresh data - only matrix assignments changed
+        await self.async_selective_refresh(["matrix_assignments"])
         _LOGGER.info("Matrix set successful: %s -> %s", source, target)
 
     async def set_power(self, devices: str | list[str], power_state: str) -> None:
@@ -266,8 +338,7 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
         for device in devices:
             await self.api.connected_device_control.config_set_device_sinkpower(power=power_state, rx=device)
 
-        # Refresh data
-        await self.async_request_refresh()
+        # No refresh needed - sink power only affects connected displays, not device status
         _LOGGER.info("Power control successful: %s -> %s", devices, power_state)
 
     # Public API methods

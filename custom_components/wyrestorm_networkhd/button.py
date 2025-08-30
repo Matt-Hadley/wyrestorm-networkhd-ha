@@ -98,8 +98,7 @@ class WyreStormReceiverDisplayPowerButton(CoordinatorEntity[WyreStormCoordinator
             )
             _LOGGER.info("Set display power %s for receiver %s", self.power_state, receiver_alias)
 
-            # Request a refresh to update the state
-            await self.coordinator.async_request_refresh()
+            # No refresh needed - display power only affects connected TV/monitor, not device status
         except Exception as err:
             _LOGGER.error("Failed to set display power: %s", err)
             raise
