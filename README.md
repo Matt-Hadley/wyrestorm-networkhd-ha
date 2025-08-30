@@ -2,6 +2,8 @@
 
 [![GitHub Release](https://img.shields.io/github/release/Matt-Hadley/wyrestorm-networkhd-ha.svg?style=flat-square)](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/releases)
 [![License](https://img.shields.io/github/license/Matt-Hadley/wyrestorm-networkhd-ha.svg?style=flat-square)](LICENSE)
+[![HACS](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=flat-square)](https://hacs.xyz/)
+[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.12%2B-41BDF5.svg?style=flat-square)](https://www.home-assistant.io/)
 
 A comprehensive Home Assistant integration for WyreStorm NetworkHD devices, providing real-time control and monitoring of matrix switching, device status, and display power management.
 
@@ -18,6 +20,7 @@ A comprehensive Home Assistant integration for WyreStorm NetworkHD devices, prov
 🔔 **Real-time Notifications** - Instant updates for device online/offline and video signal changes
 🔒 **Robust Error Handling** - Graceful degradation when devices go offline
 🏗️ **Clean Architecture** - Modern coordinator pattern with comprehensive test coverage
+⚙️ **Professional CI/CD** - Automated testing, HACS validation, and releases with GitHub Actions
 
 ## Supported Devices
 
@@ -69,15 +72,15 @@ The integration creates multiple entity types for comprehensive device control a
 - **Data Source**: `config_get_devicejsonstring()` → `online` field
 - **Real-time Updates**: Endpoint notifications
 
-#### Video Input Active  
-- **Entity ID**: `binary_sensor.{device_name}_video_input_active`
+#### Video Input
+- **Entity ID**: `binary_sensor.{device_name}_video_input`
 - **Purpose**: Shows if the encoder has an active HDMI input signal (source connected)
 - **Data Source**: `config_get_device_status()` → `hdmi in active` field
 - **Real-time Updates**: Video notifications
 - **Device Types**: Encoders only
 
-#### Video Output Active
-- **Entity ID**: `binary_sensor.{device_name}_video_output_active`  
+#### Video Output
+- **Entity ID**: `binary_sensor.{device_name}_video_output`  
 - **Purpose**: Shows if the decoder is outputting an active HDMI signal (display connected)
 - **Data Source**: `config_get_device_status()` → `hdmi out active` field
 - **Real-time Updates**: Video notifications
@@ -87,7 +90,7 @@ The integration creates multiple entity types for comprehensive device control a
 ### Select Entities
 
 #### Input Source
-- **Entity ID**: `select.{device_name}_input_source`
+- **Entity ID**: `select.{device_name}_source`
 - **Purpose**: Select which encoder (source) feeds to this decoder (display)
 - **Options**: List of available encoder devices + "None" (disconnect)
 - **Data Source**: `matrix_get()` for current assignments
@@ -232,16 +235,16 @@ automation:
     trigger:
       - platform: state
         entity_id: 
-          - binary_sensor.appletv_video_input_active
-          - binary_sensor.bluray_video_input_active
+          - binary_sensor.appletv_video_input
+          - binary_sensor.bluray_video_input
         to: "on"
     condition:
       # Only trigger if the encoder is currently routed to decoders
       - condition: template
         value_template: >
-          {% set encoder = trigger.entity_id.split('.')[1].split('_video_input_active')[0] %}
-          {% set kitchen_source = states('select.kitchen_input_source') %}
-          {% set dining_source = states('select.dining_input_source') %}
+          {% set encoder = trigger.entity_id.split('.')[1].split('_video_input')[0] %}
+          {% set kitchen_source = states('select.kitchen_source') %}
+          {% set dining_source = states('select.dining_source') %}
           {{ encoder == kitchen_source or encoder == dining_source }}
     action:
       # Turn on displays that are currently set to this encoder
@@ -250,11 +253,11 @@ automation:
           devices: >
             {% set encoder = trigger.entity_id.split('.')[1].split('_video_input_active')[0] %}
             {% set devices = [] %}
-            {% if states('select.kitchen_input_source') == encoder %}
-              {% set devices = devices + ['kitchen'] %}
+            {% if states('select.kitchen_source') == encoder %}
+              {% set devices = devices + ['Kitchen'] %}
             {% endif %}
-            {% if states('select.dining_input_source') == encoder %}
-              {% set devices = devices + ['dining'] %}
+            {% if states('select.dining_source') == encoder %}
+              {% set devices = devices + ['Dining'] %}
             {% endif %}
             {{ devices }}
           power_state: "on"
@@ -264,8 +267,8 @@ automation:
     trigger:
       - platform: state
         entity_id: 
-          - binary_sensor.appletv_video_input_active
-          - binary_sensor.bluray_video_input_active
+          - binary_sensor.appletv_video_input
+          - binary_sensor.bluray_video_input
         to: "off"
         for:
           minutes: 5
@@ -273,9 +276,9 @@ automation:
       # Only trigger if the encoder is currently routed to decoders
       - condition: template
         value_template: >
-          {% set encoder = trigger.entity_id.split('.')[1].split('_video_input_active')[0] %}
-          {% set kitchen_source = states('select.kitchen_input_source') %}
-          {% set dining_source = states('select.dining_input_source') %}
+          {% set encoder = trigger.entity_id.split('.')[1].split('_video_input')[0] %}
+          {% set kitchen_source = states('select.kitchen_source') %}
+          {% set dining_source = states('select.dining_source') %}
           {{ encoder == kitchen_source or encoder == dining_source }}
     action:
       # Turn off displays that are currently set to this encoder
@@ -284,11 +287,11 @@ automation:
           devices: >
             {% set encoder = trigger.entity_id.split('.')[1].split('_video_input_active')[0] %}
             {% set devices = [] %}
-            {% if states('select.kitchen_input_source') == encoder %}
-              {% set devices = devices + ['kitchen'] %}
+            {% if states('select.kitchen_source') == encoder %}
+              {% set devices = devices + ['Kitchen'] %}
             {% endif %}
-            {% if states('select.dining_input_source') == encoder %}
-              {% set devices = devices + ['dining'] %}
+            {% if states('select.dining_source') == encoder %}
+              {% set devices = devices + ['Dining'] %}
             {% endif %}
             {{ devices }}
           power_state: "off"
@@ -315,45 +318,7 @@ automation:
 
 ## Development
 
-### Requirements
-- Docker Desktop
-- Python 3.11+
-- Home Assistant 2024.1+
-
-### Local Development Setup
-
-1. Clone the repository:
-```bash
-git clone https://github.com/Matt-Hadley/wyrestorm-networkhd-ha.git
-cd wyrestorm-networkhd-ha
-```
-
-2. Set up the development environment:
-```bash
-./setup_dev.sh
-```
-
-3. Start Home Assistant:
-```bash
-docker-compose up -d
-```
-
-4. Access Home Assistant at http://localhost:8123
-
-### Testing
-
-The integration includes comprehensive testing:
-
-```bash
-# Install test dependencies
-pip install -r requirements_test.txt
-
-# Run tests
-pytest tests/
-
-# Run with coverage
-pytest --cov=custom_components.wyrestorm_networkhd tests/
-```
+See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed development setup, workflow, and contribution guidelines.
 
 ## Troubleshooting
 
@@ -454,7 +419,7 @@ For optimal performance:
 
 ## API Reference
 
-The integration uses the [wyrestorm-networkhd](https://github.com/Matt-Hadley/wyrestorm-networkhd-py) Python library, which provides:
+The integration uses the [wyrestorm-networkhd](https://github.com/Matt-Hadley/wyrestorm-networkhd) Python library, which provides:
 
 - **SSH Connection Management**: Automatic reconnection and error handling
 - **API Command Interface**: Full access to WyreStorm API commands
@@ -463,20 +428,7 @@ The integration uses the [wyrestorm-networkhd](https://github.com/Matt-Hadley/wy
 
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes with appropriate tests
-4. Commit your changes (`git commit -m 'Add amazing feature'`)
-5. Push to the branch (`git push origin feature/amazing-feature`)
-6. Open a Pull Request
-
-### Development Guidelines
-- Follow Home Assistant integration standards
-- Add tests for new functionality (current coverage: 75 tests)
-- Update documentation for user-facing changes
-- Use proper logging levels (debug/info/warning/error)
-- Review `CLAUDE.md` for code assistant instructions and performance guidelines
-- Use `make test-cov` for coverage reports and `make lint` for code quality checks
+We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed development setup, workflow guidelines, and contribution process.
 
 ## License
 
@@ -484,7 +436,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Credits
 
-Built on the excellent [wyrestorm-networkhd](https://github.com/Matt-Hadley/wyrestorm-networkhd-py) Python library.
+Built on the excellent [wyrestorm-networkhd](https://github.com/Matt-Hadley/wyrestorm-networkhd) Python library.
 
 ## Support
 

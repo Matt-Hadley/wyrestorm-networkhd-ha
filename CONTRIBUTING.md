@@ -1,7 +1,6 @@
 # Contributing to WyreStorm NetworkHD Home Assistant Integration
 
-Thank you for your interest in contributing! This project welcomes contributions of all kinds, from bug reports and
-feature requests to code contributions and documentation improvements.
+Thank you for your interest in contributing! This project follows modern development practices with comprehensive tooling and automated CI/CD workflows.
 
 ## 🚀 Quick Start
 
@@ -20,8 +19,10 @@ feature requests to code contributions and documentation improvements.
 ### Prerequisites
 
 - **Python 3.11+** (see `pyproject.toml` for exact requirements)
+- **Home Assistant 2024.12.0+** for testing
 - **Git** for version control
 - **Make** (optional but recommended for using project commands)
+- **Docker Desktop** (optional, for HA development environment)
 
 ### Initial Setup
 
@@ -53,6 +54,9 @@ pip install -e ".[dev]"
 
 # Install pre-commit hooks
 pre-commit install
+
+# Optional: Start Home Assistant development environment
+docker-compose up -d
 ```
 
 ## 🧪 Testing and Quality
@@ -64,13 +68,13 @@ pre-commit install
 make dev-workflow
 
 # Individual commands
-make format           # Format code with Ruff and Prettier
+make format           # Format code with Ruff
 make lint            # Run linting checks
 make test            # Run all tests
-make test-fast       # Run only fast unit tests
+make test-unit       # Run only unit tests
 make test-cov        # Run tests with coverage report
 make check           # Run all quality checks
-make build           # Build and validate package
+make ha-check        # Validate Home Assistant component
 
 # Comprehensive validation (before commits/releases)
 make health-check    # Full project validation
