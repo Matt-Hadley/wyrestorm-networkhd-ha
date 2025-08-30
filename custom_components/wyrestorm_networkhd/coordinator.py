@@ -131,6 +131,7 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
             refresh_only: List of data types to refresh. Options:
                 - "matrix_assignments": Matrix routing data only
                 - "device_status": Device status data only
+                - "device_jsonstring": Device JSON data only
         """
         if not self.data:
             _LOGGER.warning("No existing coordinator data - performing full refresh")
@@ -179,6 +180,31 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 device_info_list = self.data._device_info_cache
 
                 # Rebuild device collections with fresh status but existing JSON/info
+                transmitters, receivers = build_device_collections(
+                    device_json_list, device_status_list, device_info_list
+                )
+                updated_data.device_transmitters = transmitters
+                updated_data.device_receivers = receivers
+
+            if "device_jsonstring" in refresh_only:
+                _LOGGER.debug("Refreshing device JSON string only...")
+                device_json_list = await self.api.api_query.config_get_devicejsonstring()
+
+                # Use existing device status and device info cache
+                device_status_list = []
+                for device in list(self.data.device_transmitters.values()) + list(self.data.device_receivers.values()):
+                    from wyrestorm_networkhd.models.api_query import DeviceStatus
+
+                    device_status = DeviceStatus(
+                        aliasName=device.alias_name,
+                        online=device.online,
+                        trueName=device.true_name,
+                    )
+                    device_status_list.append(device_status)
+
+                device_info_list = self.data._device_info_cache
+
+                # Rebuild device collections with fresh JSON but existing status/info
                 transmitters, receivers = build_device_collections(
                     device_json_list, device_status_list, device_info_list
                 )
