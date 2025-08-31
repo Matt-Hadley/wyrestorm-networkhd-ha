@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.10](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/compare/v0.1.9...v0.1.10) (2025-08-31)
+
+
+### Bug Fixes
+
+* create HACS-compatible zip with files at root level ([2702334](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/2702334f7327d2e8b7ad81e7da5af7e570441e50))
+
 ## [0.1.9](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/compare/v0.1.8...v0.1.9) (2025-08-31)
 
 
