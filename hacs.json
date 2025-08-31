@@ -2,7 +2,5 @@
   "name": "WyreStorm NetworkHD",
   "content_in_root": false,
   "zip_release": true,
-  "filename": "wyrestorm_networkhd.zip",
-
-  "domains": ["binary_sensor", "button", "select"]
+  "filename": "wyrestorm_networkhd.zip"
 }
