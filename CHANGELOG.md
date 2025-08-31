@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/compare/v0.2.1...v0.2.2) (2025-08-31)
+
+
+### Bug Fixes
+
+* remove unnecessary delay in matrix assignments refresh ([7f57b10](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/7f57b105976854a8801da3fc75eb67cbd355f221))
+
 ## [0.2.1](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/compare/v0.2.0...v0.2.1) (2025-08-31)
 
 
