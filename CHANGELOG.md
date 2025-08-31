@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.8](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/compare/v0.1.7...v0.1.8) (2025-08-31)
+
+
+### Bug Fixes
+
+* make HACS validation non-blocking and simplify hacs.json ([2121617](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/21216174d2064e28e7a27cbbbdd302ca6728e321))
+
 ## [0.1.7](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/compare/v0.1.6...v0.1.7) (2025-08-31)
 
 
