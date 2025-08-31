@@ -421,8 +421,6 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
         # Refresh data - matrix assignments
         await self.async_selective_refresh(["matrix_assignments"])
-        # Brief delay to allow matrix switch to propagate
-        await asyncio.sleep(1.0)
         # Also refresh device status to update any video input changes (i.e. could have switched
         # to a source with no video, so video output will be affected)
         await self.async_selective_refresh(["device_status"])
