@@ -11,3 +11,6 @@ sys.path.insert(0, str(project_root))
 custom_components_path = project_root / "custom_components"
 if custom_components_path.exists():
     sys.path.insert(0, str(custom_components_path.parent))
+
+# Import all fixtures from _fixtures.py to make them available globally
+from tests.custom_components.wyrestorm_networkhd._fixtures import *  # noqa: E402, F401, F403
