@@ -421,9 +421,6 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
         # Refresh data - matrix assignments
         await self.async_selective_refresh(["matrix_assignments"])
-        # Also refresh device status to update any video input changes (i.e. could have switched
-        # to a source with no video, so video output will be affected)
-        await self.async_selective_refresh(["device_status"])
 
     async def set_power(self, devices: str | list[str], power_state: str) -> None:
         """Control device power with validation.
