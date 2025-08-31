@@ -419,8 +419,13 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
             _LOGGER.info("Matrix set successful: %s -> %s", source, target)
 
-        # Refresh data - matrix assignments and device status to update video activity
-        await self.async_selective_refresh(["matrix_assignments", "device_status"])
+        # Refresh data - matrix assignments
+        await self.async_selective_refresh(["matrix_assignments"])
+        # Brief delay to allow matrix switch to propagate
+        await asyncio.sleep(0.1)
+        # Also refresh device status to update any video input changes (i.e. could have switched
+        # to a source with no video, so video output will be affected)
+        await self.async_selective_refresh(["device_status"])
 
     async def set_power(self, devices: str | list[str], power_state: str) -> None:
         """Control device power with validation.
