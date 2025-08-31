@@ -47,13 +47,13 @@ dev = [
     "pytest-cov>=6.0.0",
     "pytest-asyncio>=1.0.0",
     "pytest-mock>=3.12.0",
+    "pytest-homeassistant-custom-component>=0.13.99",
     "bandit[toml]>=1.7.0",
     "pip-audit>=2.6.0",
     "mypy>=1.8.0",
     "pre-commit>=3.6.0",
     "vulture>=2.1.4",
     "setuptools-scm>=8.1.0",
-    "homeassistant>=2024.12.0",
 ]
 
 [tool.setuptools_scm]
