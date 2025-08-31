@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.1](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/compare/v0.2.0...v0.2.1) (2025-08-31)
+
+
+### Bug Fixes
+
+* add delay between matrix assignments and device status refresh ([518f82e](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/518f82e3f7682dce4744dd8a25c4f09da93c5869))
+* increase delay between matrix assignments and device status refresh ([896934a](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/896934ac1db78dd702aa8fe3117bb0c1ae415d1b))
+
 ## [0.2.0](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/compare/v0.1.10...v0.2.0) (2025-08-31)
 
 
