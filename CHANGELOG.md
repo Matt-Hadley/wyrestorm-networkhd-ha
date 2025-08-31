@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/compare/v0.1.1...v0.1.2) (2025-08-31)
+
+
+### Bug Fixes
+
+* use pytest-homeassistant-custom-component for testing ([efd8146](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/efd8146d5feda41033c2ded7590b284429f76fb6))
+
 ## [0.1.1](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/compare/v0.1.0...v0.1.1) (2025-08-31)
 
 
