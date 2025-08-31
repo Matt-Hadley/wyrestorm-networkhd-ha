@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.9](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/compare/v0.1.8...v0.1.9) (2025-08-31)
+
+
+### Bug Fixes
+
+* correct config flow domain registration to use parameter instead of class attribute ([151f53e](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/151f53e496dbae426523044bd56fae34fad86218))
+* sort manifest.json keys alphabetically for consistency ([cd44c1b](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/cd44c1b44478a0b0f65f2c9bcd711de7c119332e))
+
 ## [0.1.8](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/compare/v0.1.7...v0.1.8) (2025-08-31)
 
 
