@@ -41,9 +41,32 @@ jobs:
           echo "Tag name: '${{ steps.release.outputs.tag_name }}'"
           echo "Version: '${{ steps.release.outputs.version }}'"
 
+  hacs-validation:
+    name: HACS Pre-Release Validation
+    needs: release-please
+    if: ${{ needs.release-please.outputs.releases_created == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.release-please.outputs.tag_name }}
+
+      - name: HACS validation
+        continue-on-error: true
+        uses: hacs/action@main
+        with:
+          category: "integration"
+
+      - name: Hassfest validation
+        continue-on-error: true
+        uses: home-assistant/actions/hassfest@master
+
   publish:
     name: Build & Publish Release
-    needs: release-please
+    needs: [release-please, hacs-validation]
     if: ${{ needs.release-please.outputs.releases_created == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -157,25 +180,3 @@ jobs:
         with:
           subject-path: "*.zip"
 
-  hacs-validation:
-    name: HACS Post-Release Validation
-    needs: [release-please, publish]
-    if: ${{ needs.release-please.outputs.releases_created == 'true' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-          ref: ${{ needs.release-please.outputs.tag_name }}
-
-      - name: HACS validation
-        continue-on-error: true
-        uses: hacs/action@main
-        with:
-          category: "integration"
-
-      - name: Hassfest validation
-        continue-on-error: true
-        uses: home-assistant/actions/hassfest@master
