@@ -1,13 +1,13 @@
 {
-  "domain": "wyrestorm_networkhd",
-  "name": "WyreStorm NetworkHD",
   "codeowners": ["@Matt-Hadley"],
   "config_flow": true,
   "dependencies": [],
   "documentation": "https://github.com/Matt-Hadley/wyrestorm-networkhd-ha",
-  "issue_tracker": "https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/issues",
+  "domain": "wyrestorm_networkhd",
   "integration_type": "device",
   "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/issues",
+  "name": "WyreStorm NetworkHD",
   "requirements": ["wyrestorm-networkhd>=2.1.0"],
   "version": "2.0.0",
   "zeroconf": []
