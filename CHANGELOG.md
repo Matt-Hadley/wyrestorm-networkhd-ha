@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/compare/v0.1.0...v0.1.1) (2025-08-31)
+
+
+### Bug Fixes
+
+* add homeassistant test dependency for GitHub Actions ([c305840](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/c305840ec27581ef6bd5131bdcbcac007a750760))
+
 ## 0.1.0 (2025-08-30)
 
 
