@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.4](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/compare/v0.1.3...v0.1.4) (2025-08-31)
+
+
+### Bug Fixes
+
+* remove pytest-asyncio version constraint to resolve dependency conflict ([ee2047e](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/ee2047ede404375635f08e18c481a7a38cb7b941))
+
 ## [0.1.3](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/compare/v0.1.2...v0.1.3) (2025-08-31)
 
 
