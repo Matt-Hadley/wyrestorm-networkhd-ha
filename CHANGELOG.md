@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.6](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/compare/v0.1.5...v0.1.6) (2025-08-31)
+
+
+### Bug Fixes
+
+* correct module path in test patch decorators ([d150979](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/d1509796a2a7ee47b1a43717ebbde9a5c99ef665))
+* resolve mypy error in config_flow.py ([e653855](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/e653855acc5bd667d56c0d59c08742528a2b5b54))
+
 ## [0.1.5](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/compare/v0.1.4...v0.1.5) (2025-08-31)
 
 
