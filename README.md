@@ -364,42 +364,28 @@ logger:
 - `"Controller Link"` notifications - Real-time connectivity updates
 - `"Sink power notification"` - Display power status changes
 
-## Performance Optimizations
+## Performance & Responsiveness
 
-This integration implements several performance optimizations to minimize network overhead and API calls:
+This integration is optimized for fast, responsive control with minimal network overhead:
 
-### Smart Caching
-- **Device Info**: Cached for 10 minutes using `@cache_for_seconds(600)` decorator
-- **Reasoning**: Network configuration rarely changes, reduces API calls by ~90%
-- **Cache Invalidation**: Automatic time-based expiry
+### Response Times
+- **Switching receiver inputs**: ~500ms to update UI and reflect new video status
+- **Display power commands**: Instant (no status refresh needed)
+- **Receiver/Transmitter status changes**: <50ms via real-time notifications
+- **Regular polling**: Configurable 10-300 second intervals
 
-### Selective Refresh
-- **Matrix Changes**: Only refreshes routing data (~200ms vs ~800ms full refresh)
-- **Device Status**: Reconstructs device JSON from existing data to avoid redundant API calls
-- **Display Power**: No refresh needed (only affects connected displays, not device status)
-- **Performance Gain**: 80-85% reduction in API calls for common operations
+### Smart Updates
+The integration only fetches what's needed:
+- **Switching receiver inputs**: Updates routing and video status only
+- **Display power commands**: No refresh (displays don't affect matrix status)
+- **Receiver/Transmitter status changes**: Instant updates when devices go online/offline or video signals change
+- **Device configuration**: Cached for 10 minutes (rarely changes)
 
-### API Call Optimization Summary
-| Operation | Before | After | Savings |
-|-----------|--------|-------|---------|
-| Video Input Change | 2x matrix_get calls | 1x matrix_get call | 50% |
-| Display Power Toggle | Full refresh (~800ms) | No refresh (0ms) | 100% |
-| Device Info Updates | Every poll | Every 10 minutes | 90% |
-| Status Updates | Full data fetch | Selective refresh | 60-80% |
-
-### Real-time Notifications
-The integration subscribes to device notifications for instant updates without polling:
-- **Device Online/Offline**: Triggers selective refresh of device status only
-- **Video Found/Lost**: Triggers selective refresh of matrix assignments only
-- **Response Time**: <50ms from event to UI update
-
-### Performance Metrics
-- **Matrix Assignment Refresh**: ~200ms
-- **Device Status Refresh**: ~300ms  
-- **Full Refresh**: ~800ms
-- **Cached Device Info**: <1ms
-- **Notification Response**: <50ms
-- **Typical UI Response**: <100ms after user action
+### Network Efficiency
+- Uses selective API calls instead of full refreshes
+- Caches static device information
+- Subscribes to SSH notifications for instant updates without polling
+- Typical operation uses 80% fewer API calls than a naive implementation
 
 ## Advanced Configuration
 

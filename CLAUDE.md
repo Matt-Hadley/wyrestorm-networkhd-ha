@@ -11,9 +11,9 @@ This is a Home Assistant integration for WyreStorm NetworkHD matrix switching sy
 - Use `async_selective_refresh()` for targeted updates
 
 ### API Optimization Rules
-1. **Video input changes**: Only refresh matrix assignments
+1. **Video input changes**: Refresh matrix assignments and device status
    ```python
-   await coordinator.async_selective_refresh(["matrix_assignments"])
+   await coordinator.async_selective_refresh(["matrix_assignments", "device_status"])
    ```
 
 2. **Display power operations**: No refresh needed (doesn't affect device status)
@@ -90,16 +90,17 @@ custom_components/wyrestorm_networkhd/
 6. Test with actual hardware if possible
 
 ## 📊 Performance Guidelines
-- **Full refresh**: ~800ms (all API calls)
+- **Input switching**: ~500ms (matrix + status refresh)
 - **Matrix assignment refresh**: ~200ms
 - **Device status refresh**: ~300ms  
 - **Cached device info**: <1ms
+- **Real-time notifications**: <50ms
 - **Target UI response**: <100ms after user action
 
 ### API Call Optimization
-- Video input changes: Only 1x matrix_get (was 2x)
-- Display power: 0 API calls (was full refresh)
-- Device info: 1 call per 10 minutes (was every poll)
+- Video input changes: Matrix + status refresh only
+- Display power: No refresh needed
+- Device info: Cached for 10 minutes
 
 ## 🐛 Debugging Tips
 - Enable debug logging: Set logger `custom_components.wyrestorm_networkhd` to `debug`
