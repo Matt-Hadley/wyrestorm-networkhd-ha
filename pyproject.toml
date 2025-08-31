@@ -7,10 +7,7 @@ name = "wyrestorm-networkhd-ha"
 dynamic = ["version"]
 description = "Home Assistant integration for WyreStorm NetworkHD matrix switching and device control"
 requires-python = ">=3.11"
-dependencies = [
-    "voluptuous>=0.13.0",
-    "wyrestorm-networkhd>=2.1.0",
-]
+dependencies = ["voluptuous>=0.13.0", "wyrestorm-networkhd>=2.1.0"]
 keywords = [
     "wyrestorm",
     "networkhd",
@@ -45,9 +42,9 @@ dev = [
     "ruff>=0.12.0",
     "pytest>=8.0.0",
     "pytest-cov",
-    "pytest-asyncio>=1.0.0",
+    "pytest-asyncio",
     "pytest-mock>=3.12.0",
-    "pytest-homeassistant-custom-component>=0.13.99",
+    "pytest-homeassistant-custom-component>=0.13",
     "bandit[toml]>=1.7.0",
     "pip-audit>=2.6.0",
     "mypy>=1.8.0",
