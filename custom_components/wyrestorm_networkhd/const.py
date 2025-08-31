@@ -11,13 +11,13 @@ VERSION = "2.0.0"  # Integration version
 CONF_HOST = "host"  # IP address or hostname of NetworkHD controller
 CONF_PORT = "port"  # SSH port number (typically 10022 for WyreStorm)
 CONF_USERNAME = "username"  # SSH username for device authentication
-CONF_PASSWORD = "password"  # SSH password for device authentication
+CONF_PASSWORD = "password"  # SSH password for device authentication  # nosec B105
 CONF_UPDATE_INTERVAL = "update_interval"  # Polling frequency in seconds
 
 # Default connection values
 DEFAULT_PORT = 10022  # WyreStorm standard SSH port
 DEFAULT_USERNAME = "wyrestorm"  # Factory default SSH username
-DEFAULT_PASSWORD = "networkhd"  # Factory default SSH password (SECURITY: Change in production!)
+DEFAULT_PASSWORD = "networkhd"  # Factory default SSH password (SECURITY: Change in production!)  # nosec B105
 DEFAULT_UPDATE_INTERVAL = 60  # Poll device every 60 seconds for status updates
 
 # SSH Security Settings
