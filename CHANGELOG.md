@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/compare/v0.1.2...v0.1.3) (2025-08-31)
+
+
+### Bug Fixes
+
+* remove pytest-cov version constraint to resolve dependency conflict ([bce42df](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/bce42df8bde1e61ac1a3eddd59fdd3d88ad8dc6f))
+
 ## [0.1.2](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/compare/v0.1.1...v0.1.2) (2025-08-31)
 
 
