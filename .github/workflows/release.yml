@@ -117,16 +117,16 @@ jobs:
 
       - name: Create release zip
         run: |
-          # Create HACS-compatible zip (just the integration)
-          cd custom_components
-          zip -r ../wyrestorm_networkhd.zip wyrestorm_networkhd/ \
+          # Create HACS-compatible zip (files at root level)
+          cd custom_components/wyrestorm_networkhd
+          zip -r ../../wyrestorm_networkhd.zip . \
             -x "*.pyc" \
             -x "*__pycache__*" \
             -x "*.DS_Store" \
-            -x "*/.DS_Store" \
-            -x "*/._*" \
+            -x ".DS_Store" \
+            -x "._*" \
             -x "*_version.py"
-          cd ..
+          cd ../..
           
           # Also create a full bundle
           zip -r wyrestorm-networkhd-ha.zip \
