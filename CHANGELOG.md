@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.5](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/compare/v0.1.4...v0.1.5) (2025-08-31)
+
+
+### Bug Fixes
+
+* import test fixtures in conftest.py for global availability ([eab0559](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/eab05596b34ee5c6b3bfc0b558240fe66df613ae))
+
 ## [0.1.4](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/compare/v0.1.3...v0.1.4) (2025-08-31)
 
 
