@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.1.7](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/compare/v0.1.6...v0.1.7) (2025-08-31)
+
+
+### Bug Fixes
+
+* suppress false positive security warnings for default credentials ([cec7e8f](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/cec7e8f680245dd53ae626c674f02c1e176c5123))
+* update hacs.json for HACS validation compliance ([987963e](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/987963e1f19a997431cd24f65a7277b1dad71e5f))
+* update release workflow to exclude cache and temp files from zips ([bafb476](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/bafb47681630095f1066b4312bbba1ec6a0286b3))
+
 ## [0.1.6](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/compare/v0.1.5...v0.1.6) (2025-08-31)
 
 
