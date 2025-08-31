@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.0](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/compare/v0.1.10...v0.2.0) (2025-08-31)
+
+
+### Features
+
+* refresh device status on matrix changes and improve performance documentation ([f739f6f](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/f739f6f3f53e26e5e538e994edb456baedbc5ad3))
+
+
+### Bug Fixes
+
+* correct manifest.json key ordering and move HACS validation before release ([78d0f43](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/78d0f43a4fb39f08c0a3050f0bfdf49f4f8b885b))
+
 ## [0.1.10](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/compare/v0.1.9...v0.1.10) (2025-08-31)
 
 
