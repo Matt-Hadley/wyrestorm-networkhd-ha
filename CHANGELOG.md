@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.3](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/compare/v0.2.2...v0.2.3) (2025-08-31)
+
+
+### Bug Fixes
+
+* remove redundant device status refresh in data update ([349ac94](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/349ac94454fa771d1646f8e9fa0379c99de1981b))
+
 ## [0.2.2](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/compare/v0.2.1...v0.2.2) (2025-08-31)
 
 
