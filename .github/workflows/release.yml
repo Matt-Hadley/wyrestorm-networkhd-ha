@@ -117,19 +117,29 @@ jobs:
 
       - name: Create release zip
         run: |
+          # Create HACS-compatible zip (just the integration)
           cd custom_components
-          zip -r ../wyrestorm_networkhd.zip wyrestorm_networkhd/
+          zip -r ../wyrestorm_networkhd.zip wyrestorm_networkhd/ \
+            -x "*.pyc" \
+            -x "*__pycache__*" \
+            -x "*.DS_Store" \
+            -x "*/.DS_Store" \
+            -x "*/._*" \
+            -x "*_version.py"
           cd ..
           
           # Also create a full bundle
           zip -r wyrestorm-networkhd-ha.zip \
-            custom_components/ \
+            custom_components/wyrestorm_networkhd/ \
             README.md \
             hacs.json \
             LICENSE \
             -x "*.pyc" \
             -x "*__pycache__*" \
-            -x "*.DS_Store"
+            -x "*.DS_Store" \
+            -x "*/.DS_Store" \
+            -x "*/._*" \
+            -x "*_version.py"
 
       - name: Upload release assets
         uses: softprops/action-gh-release@v2
