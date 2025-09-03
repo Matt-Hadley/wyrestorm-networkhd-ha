@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.4](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/compare/v0.2.3...v0.2.4) (2025-09-03)
+
+
+### Bug Fixes
+
+* correct controller reboot API method path ([39a609b](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/39a609b1783f94824be3a2c278bc7ab7a754ca33))
+
 ## [0.2.3](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/compare/v0.2.2...v0.2.3) (2025-08-31)
 
 
