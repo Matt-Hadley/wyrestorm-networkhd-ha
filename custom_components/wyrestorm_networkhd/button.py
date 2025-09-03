@@ -154,7 +154,7 @@ class WyreStormControllerRebootButton(CoordinatorEntity[WyreStormCoordinator], B
     async def async_press(self) -> None:
         """Handle the button press to reboot controller."""
         try:
-            await self.coordinator.api.other_functions.config_set_reboot()
+            await self.coordinator.api.reboot_reset.set_reboot()
             _LOGGER.info("Controller reboot initiated")
 
             # Note: Don't request refresh immediately as controller will be rebooting
