@@ -19,7 +19,9 @@ GitHub Actions workflows for Home Assistant custom integration.
 - **HACS Validation** job: HACS action and hassfest
 
 Every check fails the job on errors. `main` is protected: a pull request needs the **Quality Checks & Tests** and **HACS
-Validation** checks to pass before it is merged.
+Validation** checks to pass before it is merged. The release PR that release-please opens is the exception: it is
+created with the workflow token, which doesn't trigger CI, so it is merged with an admin bypass after its changelog is
+checked.
 
 ### `release.yml` - Release Management
 

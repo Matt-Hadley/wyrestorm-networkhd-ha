@@ -50,7 +50,7 @@ endif
 # Phony targets
 .PHONY: help \
         install install-deps create-venv update-deps \
-        test test-cov test-watch \
+        test test-cov \
         format format-code format-check prettier-check lint type-check \
         security-check code-quality check \
         clean clean-all clean-build clean-pyc clean-test clean-cache \
@@ -78,7 +78,6 @@ help: ## Show this help message
 	@echo "$(YELLOW)🧪 Testing:$(NC)"
 	@echo "  test             - Run all tests"
 	@echo "  test-cov         - Run all tests with coverage report"
-	@echo "  test-watch       - Run tests in watch mode"
 	@echo ""
 	@echo "$(YELLOW)✨ Code Formatting:$(NC)"
 	@echo "  format           - Format all code"
@@ -162,10 +161,6 @@ test-cov: ## Run all tests with coverage
 	$(ECHO) "$(YELLOW)Running all tests with coverage...$(NC)"
 	$(Q)$(PYTEST) tests/ -v  # coverage options are in pyproject.toml
 	@echo "$(GREEN)✓$(NC) Coverage report generated (see htmlcov/index.html)"
-
-test-watch: ## Run tests in watch mode
-	$(ECHO) "$(YELLOW)Running tests in watch mode...$(NC)"
-	$(Q)$(PYTEST) tests/ -v --tb=short -x --looponfail
 
 # =============================================================================
 # Code Formatting

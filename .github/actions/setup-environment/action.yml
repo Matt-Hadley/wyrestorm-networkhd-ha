@@ -12,7 +12,7 @@ runs:
     - name: Set up Python
       uses: actions/setup-python@v7
       with:
-        python-version-file: "pyproject.toml" # requires-python
+        python-version: "3.14" # what Home Assistant 2026.10 runs; requires-python is only a floor
         cache: "pip"
         cache-dependency-path: "pyproject.toml"
 
