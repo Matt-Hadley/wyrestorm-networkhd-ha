@@ -12,7 +12,7 @@ from wyrestorm_networkhd.exceptions import ResponseError
 
 from custom_components.wyrestorm_networkhd.const import DOMAIN, SERVICE_MATRIX_SET, SERVICE_POWER_CONTROL
 
-from .conftest import ENTRY_DATA, RAW, FakeNotificationHandler, parsed_responses
+from .conftest import ENTRY_DATA, OTHER_FINGERPRINT, RAW, FakeNotificationHandler, parsed_responses
 
 OTHER_HOST = "192.0.2.20"
 
@@ -112,6 +112,7 @@ async def test_two_controllers(hass: HomeAssistant, setup_integration: MockConfi
     other_client = AsyncMock()
     other_client.is_connected = Mock(return_value=True)
     other_client.notification_handler = FakeNotificationHandler()
+    other_client.host_key_fingerprint = OTHER_FINGERPRINT
     other_api = AsyncMock()
     # Second controller: different hardware (true names); Display2 renamed so only it has "Office".
     raw = {k: v.replace("E4CE02", "E4CE03").replace("Display2", "Office") for k, v in RAW.items()}

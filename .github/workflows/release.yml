@@ -85,7 +85,6 @@ jobs:
         with:
           path: |
             ~/.cache/pip
-            .venv
           key: ${{ runner.os }}-python-${{ hashFiles('pyproject.toml') }}
           restore-keys: |
             ${{ runner.os }}-python-

@@ -7,6 +7,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import (
     config_validation as cv,
     device_registry as dr,
+    issue_registry as ir,
 )
 from homeassistant.helpers.typing import ConfigType
 
@@ -48,3 +49,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: WyreStormConfigEntry) ->
 async def async_unload_entry(hass: HomeAssistant, entry: WyreStormConfigEntry) -> bool:
     """Unload a config entry (the coordinator disconnects itself via async_shutdown)."""
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: WyreStormConfigEntry) -> None:
+    """Delete the entry's host key repair issue when the entry is removed."""
+    ir.async_delete_issue(hass, DOMAIN, f"host_key_mismatch_{entry.entry_id}")

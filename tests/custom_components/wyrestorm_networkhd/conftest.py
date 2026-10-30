@@ -18,10 +18,14 @@ from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from wyrestorm_networkhd.models.api_query import DeviceInfo, DeviceJsonString, DeviceStatus, Matrix, Version
 
-from custom_components.wyrestorm_networkhd.const import DOMAIN
+from custom_components.wyrestorm_networkhd.const import CONF_HOST_KEY_FINGERPRINT, DOMAIN
 
 HOST = "192.0.2.10"
 ENTRY_DATA = {CONF_HOST: HOST, CONF_USERNAME: "wyrestorm", CONF_PASSWORD: "networkhd", CONF_PORT: 10022}
+# Made-up fingerprints (base64 of sha256 over arbitrary bytes), not from a real controller.
+FINGERPRINT = "SHA256:IH0oxHI46J7uM9kkm9vr64Ddm2qrmu0F3/JP54PLwMA"
+OTHER_FINGERPRINT = "SHA256:jHMfTgN4DzYM30aTld0GEoKVYRhT2Cbocfm/3k24kIo"
+PINNED_DATA = {**ENTRY_DATA, CONF_HOST_KEY_FINGERPRINT: [FINGERPRINT]}
 RAW: dict[str, str] = json.loads((Path(__file__).parent / "fixtures" / "controller_responses.json").read_text())
 
 
@@ -60,25 +64,27 @@ def auto_enable_custom_integrations(enable_custom_integrations: None) -> None:
 
 @pytest.fixture
 def mock_client() -> Generator[MagicMock]:
-    """Patch the SSH client and NHDAPI; `mock_client.api` is the fake API."""
+    """Patch the SSH client and NHDAPI; `mock_client.api` is the fake API, `mock_client.ssh_cls` the class."""
     client = AsyncMock()
     client.is_connected = Mock(return_value=True)
     client.notification_handler = FakeNotificationHandler()
+    client.host_key_fingerprint = FINGERPRINT
     client.api = api = AsyncMock()
     for name, value in parsed_responses().items():
         getattr(api.api_query, name).return_value = value
     with (
-        patch("custom_components.wyrestorm_networkhd.coordinator.NetworkHDClientSSH", return_value=client),
+        patch("custom_components.wyrestorm_networkhd.coordinator.NetworkHDClientSSH", return_value=client) as cls,
         patch("custom_components.wyrestorm_networkhd.coordinator.NHDAPI", return_value=api),
         patch("custom_components.wyrestorm_networkhd.config_flow.NHDAPI", return_value=api),
     ):
+        client.ssh_cls = cls
         yield client
 
 
 @pytest.fixture
 def config_entry(hass: HomeAssistant) -> MockConfigEntry:
     """Return a config entry added to hass."""
-    entry = MockConfigEntry(domain=DOMAIN, unique_id=HOST, title=f"WyreStorm NetworkHD ({HOST})", data=ENTRY_DATA)
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=HOST, title=f"WyreStorm NetworkHD ({HOST})", data=PINNED_DATA)
     entry.add_to_hass(hass)
     return entry
 

@@ -9,6 +9,7 @@ from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 
+from .const import CONF_HOST_KEY_FINGERPRINT
 from .coordinator import WyreStormConfigEntry
 
 # The host is also the unique id and part of the title.
@@ -20,6 +21,7 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: WyreSto
     coordinator = entry.runtime_data
     return {
         "entry": async_redact_data(entry.as_dict(), TO_REDACT),
+        "host_key_pinned": bool(entry.data.get(CONF_HOST_KEY_FINGERPRINT)),
         "last_update_success": coordinator.last_update_success,
         "data": async_redact_data(asdict(coordinator.data), TO_REDACT),
         # Raw library models, which carry many more fields than the entities use.

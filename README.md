@@ -48,12 +48,19 @@ Go to **Settings > Devices & services > Add integration** and search for **WyreS
 | Username | `wyrestorm` | Controller SSH username                  |
 | Password | `networkhd` | Controller SSH password                  |
 | Port     | `10022`     | Controller SSH port                      |
+| SSH host key fingerprint (optional) | | Pin the controller's key before the first connect (see [Security](#security)) |
 
 The integration connects and queries the controller's version before creating the entry. If that fails you see one of:
 
 - **Failed to connect** (`cannot_connect`): the controller is unreachable, SSH is not enabled, or the port is wrong.
 - **Invalid authentication** (`invalid_auth`): the username or password was rejected.
+- **Not a valid SSH host key fingerprint** (`invalid_host_key_fingerprint`): the fingerprint field could not be parsed.
+- **Different SSH host key** (`host_key_mismatch`): the controller presented another key than the one you entered; the
+  message shows the presented fingerprint.
 - **Unexpected error** (`unknown`): anything else; check the Home Assistant log.
+
+If you leave the fingerprint empty, the integration shows the SSH host key the controller presented and asks you to
+confirm it; it is then pinned (see [Security](#security)).
 
 Each controller can be added once (its host identifies it).
 
@@ -66,8 +73,10 @@ Each controller can be added once (its host identifies it).
 
 ### Reconfigure
 
-**Reconfigure** on the integration entry changes the host, username, password and port. The new details are tested
-before they are saved. Changing the host keeps the same controller device and its entities.
+**Reconfigure** on the integration entry changes the host, username, password, port and SSH host key fingerprint. The
+new details are tested before they are saved. Changing the host keeps the same controller device and its entities.
+The fingerprint field is pre-filled with the pinned key: edit it to pin another key, or clear it to confirm the key the
+controller presents now.
 
 ### Reauthenticate
 
@@ -196,9 +205,27 @@ the raw device status and info, with the host, username, password, IP addresses,
 
 ## Security
 
-The integration accepts the controller's SSH host key without verifying it, so nothing protects against another device
-on your network impersonating the controller and receiving the SSH credentials. Keep the controller on a trusted network
-segment.
+The integration pins the controller's SSH host key (trust on first use): when you add the controller it shows the key
+the controller presented and asks you to confirm it, and from then on it refuses to connect, before sending the
+username and password, if the controller presents a different key. Entries set up with 1.0.x pin the key presented on
+their first connection after upgrading (logged once at INFO).
+
+To pin the key before the first connection instead, enter its fingerprint in the **SSH host key fingerprint** field. Get
+it from a machine you trust on the same network:
+
+```bash
+ssh-keyscan -p 10022 <host> | ssh-keygen -lf -
+```
+
+Paste the `SHA256:...` line(s); several fingerprints are allowed (one per line). Controllers usually offer an ECDSA and
+an RSA key and the integration negotiates ECDSA, so paste both lines or the ECDSA one.
+
+If the controller presents a different key later, entities go unavailable and a repair issue is shown with the presented
+fingerprint; Home Assistant keeps checking at each poll without sending credentials (the key is rejected before login),
+and recovers automatically if the pinned key comes back. (If the key differs when the entry is set up, at startup or on
+reload, the entry stops without retrying.) If you expect the change (the controller was replaced or reset), use
+**Reconfigure** to enter the new fingerprint or clear the field to confirm the new key. Otherwise find out what is
+answering at the controller's address. Diagnostics show whether a key is pinned and the pinned fingerprint.
 
 ## Known limitations
 

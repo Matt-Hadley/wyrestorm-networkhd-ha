@@ -13,15 +13,23 @@ from typing import Any, Literal
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_PORT, CONF_USERNAME
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryError, HomeAssistantError
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from wyrestorm_networkhd import NHDAPI, NetworkHDClientSSH
+from wyrestorm_networkhd import NHDAPI, HostKeyMismatchError, NetworkHDClientSSH, normalize_fingerprints
 from wyrestorm_networkhd.exceptions import AuthenticationError, NetworkHDError
 from wyrestorm_networkhd.models.api_query import DeviceInfo, DeviceStatus, Matrix
 
 from ._utils_coordinator import build_device_collections
-from .const import CONF_UPDATE_INTERVAL, DEFAULT_PORT, DEFAULT_UPDATE_INTERVAL, DOMAIN, SSH_HOST_KEY_POLICY
+from .const import (
+    CONF_HOST_KEY_FINGERPRINT,
+    CONF_UPDATE_INTERVAL,
+    DEFAULT_PORT,
+    DEFAULT_UPDATE_INTERVAL,
+    DOMAIN,
+    SSH_HOST_KEY_POLICY,
+)
 from .models.coordinator import CoordinatorData
 from .models.device_receiver_transmitter import DeviceReceiver, DeviceTransmitter
 
@@ -36,13 +44,15 @@ type WyreStormConfigEntry = ConfigEntry[WyreStormCoordinator]
 
 
 def create_client(data: dict[str, Any]) -> NetworkHDClientSSH:
-    """Create the SSH client from config entry data."""
+    """Create the SSH client from config entry data (pinning the host key when fingerprints are set)."""
+    pinned = {"host_key_fingerprints": fps} if (fps := data.get(CONF_HOST_KEY_FINGERPRINT)) else {}
     return NetworkHDClientSSH(
         host=data[CONF_HOST],
         port=data.get(CONF_PORT, DEFAULT_PORT),
         username=data[CONF_USERNAME],
         password=data[CONF_PASSWORD],
         ssh_host_key_policy=SSH_HOST_KEY_POLICY,
+        **pinned,
     )
 
 
@@ -86,7 +96,9 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
         """Connect and subscribe to notifications (runs once before the first refresh)."""
         self.api = NHDAPI(self.client)
         try:
-            await self.client.connect()
+            await self._connect()
+        except HostKeyMismatchError as err:
+            raise self._host_key_mismatch(ConfigEntryError, err) from err  # no retries until reconfigured
         except AuthenticationError as err:
             raise ConfigEntryAuthFailed(f"Controller at {self.host} rejected the credentials") from err
         except API_ERRORS as err:
@@ -117,7 +129,41 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
         """Reconnect if the link dropped (call with `_lock` held)."""
         if not self.client.is_connected():
             _LOGGER.debug("Not connected to %s, reconnecting", self.host)
+            await self._connect()
+
+    def _host_key_mismatch(self, cls: type[HomeAssistantError], err: HostKeyMismatchError) -> HomeAssistantError:
+        return cls(
+            translation_domain=DOMAIN,
+            translation_key="host_key_mismatch",
+            translation_placeholders={"host": self.host, "fingerprint": err.presented_fingerprint},
+        )
+
+    async def _connect(self) -> None:
+        """Connect; pin the host key if none is stored; a key mismatch raises a repair issue (and re-raises)."""
+        entry = self.config_entry
+        issue_id = f"host_key_mismatch_{entry.entry_id}"
+        try:
             await self.client.connect()
+        except HostKeyMismatchError as err:
+            # The library rejects the key before authenticating, so no credentials were sent.
+            ir.async_create_issue(
+                self.hass,
+                DOMAIN,
+                issue_id,
+                is_fixable=False,
+                severity=ir.IssueSeverity.ERROR,
+                translation_key="host_key_mismatch",
+                translation_placeholders={"host": self.host, "fingerprint": err.presented_fingerprint},
+            )
+            raise
+        ir.async_delete_issue(self.hass, DOMAIN, issue_id)
+        # Entries from 1.0.x have no pinned key: trust the one presented now (TOFU).
+        if CONF_HOST_KEY_FINGERPRINT not in entry.data and (fingerprint := self.client.host_key_fingerprint):
+            self.hass.config_entries.async_update_entry(
+                entry, data={**entry.data, CONF_HOST_KEY_FINGERPRINT: [fingerprint]}
+            )
+            self.client.host_key_fingerprints = normalize_fingerprints(fingerprint)  # pin later reconnects
+            _LOGGER.info("Pinned the SSH host key of the controller at %s: %s", self.host, fingerprint)
 
     async def _async_update_data(self) -> CoordinatorData:
         """Fetch all data, reconnecting first if the link dropped."""
@@ -125,6 +171,9 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
             try:
                 await self._ensure_connected()
                 return await self._fetch()
+            except HostKeyMismatchError as err:
+                # Keep polling (the key is rejected before login) so a returning pinned key recovers on its own.
+                raise self._host_key_mismatch(UpdateFailed, err) from err
             except AuthenticationError as err:
                 raise ConfigEntryAuthFailed(f"Controller at {self.host} rejected the credentials") from err
             except API_ERRORS as err:
@@ -174,10 +223,10 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
     async def async_set_matrix(self, source: DeviceTransmitter | None, receivers: list[DeviceReceiver]) -> None:
         """Route `source` to `receivers` (None disconnects them), then re-read the matrix."""
         rx = [r.alias_name for r in receivers]
-        switch = self.api.media_stream_matrix_switch
         async with self._lock:
             try:
                 await self._ensure_connected()
+                switch = self.api.media_stream_matrix_switch
                 if source is None:
                     await switch.matrix_set_null(rx)
                 else:
