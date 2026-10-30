@@ -21,7 +21,7 @@ runs:
   steps:
     # First, set up a default Python version to read pyproject.toml
     - name: Set up initial Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v7
       with:
         python-version: "3.12" # Use a recent version that has tomllib
 
@@ -57,7 +57,7 @@ runs:
         echo "package-name=$PACKAGE_NAME" >> $GITHUB_OUTPUT
 
     - name: Set up Python ${{ steps.setup-env.outputs.python-version }}
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v7
       with:
         python-version: ${{ steps.setup-env.outputs.python-version }}
         cache: "pip"
