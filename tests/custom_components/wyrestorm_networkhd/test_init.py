@@ -29,7 +29,7 @@ from wyrestorm_networkhd.models.api_query import DeviceJsonString, Matrix
 from custom_components.wyrestorm_networkhd.const import CONF_HOST_KEY_FINGERPRINT, DOMAIN
 from custom_components.wyrestorm_networkhd.diagnostics import async_get_config_entry_diagnostics
 
-from .conftest import ENTRY_DATA, FINGERPRINT, HOST, MAC, OTHER_FINGERPRINT, PINNED_DATA, RAW
+from .conftest import ENTRY_DATA, FINGERPRINT, HOST, MAC, OTHER_FINGERPRINT, PINNED_DATA, RAW, parsed_responses
 
 LINK_RX1 = "binary_sensor.receiver_display1_controller_link"
 VIDEO_TX1 = "binary_sensor.transmitter_source1_video_input"
@@ -528,3 +528,50 @@ async def test_entry_keeps_host_when_mac_taken(
     await hass.async_block_till_done()
     assert config_entry.unique_id == HOST
     assert config_entry.state is ConfigEntryState.LOADED
+
+
+def drop_endpoint(query: MagicMock, alias: str) -> None:
+    """Make the controller stop reporting the endpoint `alias` (as if it was removed from the controller)."""
+    for method, attr in [
+        (query.config_get_devicejsonstring, "aliasName"),
+        (query.config_get_device_status, "aliasname"),
+        (query.config_get_device_info, "aliasname"),
+    ]:
+        method.return_value = [d for d in method.return_value if getattr(d, attr) != alias]
+
+
+async def poll(hass: HomeAssistant, freezer: FrozenDateTimeFactory, times: int = 1) -> None:
+    """Run `times` fallback polls."""
+    for _ in range(times):
+        freezer.tick(timedelta(seconds=61))
+        async_fire_time_changed(hass)
+        await hass.async_block_till_done()
+
+
+async def test_new_endpoint_added_without_reload(
+    hass: HomeAssistant, config_entry: MockConfigEntry, mock_client: MagicMock, freezer: FrozenDateTimeFactory
+) -> None:
+    """An endpoint that appears after setup gets its device and entities at the next refresh."""
+    query = mock_client.api.api_query
+    full = {m: getattr(query, m).return_value for m in ("config_get_devicejsonstring", "config_get_device_status")}
+    drop_endpoint(query, "Display1")
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    assert hass.states.get(LINK_RX1) is None
+
+    for method, value in full.items():
+        getattr(query, method).return_value = value
+    query.config_get_device_info.return_value = parsed_responses()["config_get_device_info"]
+    # The controller notifies that the endpoint came online (which also re-reads the cached device info).
+    mock_client.notification_handler.fire("endpoint", NotificationEndpoint(online=True, device="Display1"))
+    await poll(hass, freezer)
+
+    for entity_id in (LINK_RX1, SOURCE_RX1, POWER_ON_RX1, "binary_sensor.receiver_display1_video_output"):
+        assert hass.states.get(entity_id).state != STATE_UNAVAILABLE, entity_id
+    device = dr.async_get(hass).async_get_device_by_identifier(
+        (DOMAIN, "NHD-400-RX-E4CE02BB0001"), config_entry.entry_id
+    )
+    assert device.via_device_id == config_entry.runtime_data.controller_device_id
+    assert len(er.async_entries_for_config_entry(er.async_get(hass), config_entry.entry_id)) == len(
+        [e for p in EXPECTED_ENTITIES.values() for e in p]
+    )

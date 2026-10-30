@@ -7,7 +7,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .coordinator import WyreStormConfigEntry
-from .entity import WyreStormEndpointEntity
+from .entity import WyreStormEndpointEntity, async_add_endpoint_entities
+from .models.device_receiver_transmitter import DeviceReceiver, DeviceTransmitter
 
 PARALLEL_UPDATES = 1
 NO_SOURCE = "None"  # option that disconnects the receiver
@@ -19,10 +20,13 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up WyreStorm NetworkHD select entities."""
-    coordinator = entry.runtime_data
-    async_add_entities(
-        WyreStormReceiverSourceSelect(coordinator, rx, "source") for rx in coordinator.data.device_receivers.values()
-    )
+
+    def create(device: DeviceReceiver | DeviceTransmitter) -> list[SelectEntity]:
+        if not isinstance(device, DeviceReceiver):
+            return []
+        return [WyreStormReceiverSourceSelect(entry.runtime_data, device, "source")]
+
+    async_add_endpoint_entities(entry, async_add_entities, create)
 
 
 class WyreStormReceiverSourceSelect(WyreStormEndpointEntity, SelectEntity):

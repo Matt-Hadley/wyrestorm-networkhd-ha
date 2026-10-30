@@ -13,8 +13,8 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import WyreStormConfigEntry, WyreStormCoordinator
-from .entity import WyreStormEndpointEntity
-from .models.device_receiver_transmitter import DeviceReceiver
+from .entity import WyreStormEndpointEntity, async_add_endpoint_entities
+from .models.device_receiver_transmitter import DeviceReceiver, DeviceTransmitter
 
 PARALLEL_UPDATES = 1
 
@@ -26,13 +26,17 @@ async def async_setup_entry(
 ) -> None:
     """Set up WyreStorm NetworkHD button entities."""
     coordinator = entry.runtime_data
-    entities: list[ButtonEntity] = [WyreStormControllerRebootButton(coordinator)]
-    for rx in coordinator.data.device_receivers.values():
-        entities += [
-            WyreStormDisplayPowerButton(coordinator, rx, "on"),
-            WyreStormDisplayPowerButton(coordinator, rx, "off"),
+    async_add_entities([WyreStormControllerRebootButton(coordinator)])
+
+    def create(device: DeviceReceiver | DeviceTransmitter) -> list[ButtonEntity]:
+        if not isinstance(device, DeviceReceiver):
+            return []
+        return [
+            WyreStormDisplayPowerButton(coordinator, device, "on"),
+            WyreStormDisplayPowerButton(coordinator, device, "off"),
         ]
-    async_add_entities(entities)
+
+    async_add_endpoint_entities(entry, async_add_entities, create)
 
 
 class WyreStormDisplayPowerButton(WyreStormEndpointEntity, ButtonEntity):
