@@ -13,11 +13,11 @@ from typing import Any, Literal
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_PORT, CONF_USERNAME
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from wyrestorm_networkhd import NHDAPI, NetworkHDClientSSH
-from wyrestorm_networkhd.exceptions import NetworkHDError
+from wyrestorm_networkhd.exceptions import AuthenticationError, NetworkHDError
 from wyrestorm_networkhd.models.api_query import DeviceInfo
 
 from ._utils_coordinator import build_device_collections, process_matrix_assignments
@@ -82,6 +82,8 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
         self.api = await self.hass.async_add_executor_job(NHDAPI, self.client)
         try:
             await self.client.connect()
+        except AuthenticationError as err:
+            raise ConfigEntryAuthFailed(f"Controller at {self.host} rejected the credentials") from err
         except API_ERRORS as err:
             raise UpdateFailed(f"Cannot connect to controller at {self.host}: {err}") from err
         for notification_type in NOTIFICATION_TYPES:
@@ -113,6 +115,8 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
                     _LOGGER.debug("Not connected to %s, reconnecting", self.host)
                     await self.client.connect()
                 return await self._fetch()
+            except AuthenticationError as err:
+                raise ConfigEntryAuthFailed(f"Controller at {self.host} rejected the credentials") from err
             except API_ERRORS as err:
                 # Drop the link so the next update starts from a clean connection.
                 with suppress(*API_ERRORS):

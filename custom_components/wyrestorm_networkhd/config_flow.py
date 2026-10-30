@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from contextlib import suppress
 from typing import Any
 
@@ -114,6 +115,27 @@ class WyreStormConfigFlow(ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="reconfigure", data_schema=get_config_schema(user_input or dict(entry.data)), errors=errors
+        )
+
+    async def async_step_reauth(self, entry_data: Mapping[str, Any]) -> ConfigFlowResult:
+        """Start reauthentication after the controller rejected the stored credentials."""
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Ask for new credentials and check them against the configured controller."""
+        entry = self._get_reauth_entry()
+        errors: dict[str, str] = {}
+        if user_input is not None and not (errors := await self._async_try_connect({**entry.data, **user_input})):
+            return self.async_update_reload_and_abort(entry, data_updates=user_input)
+
+        username = (user_input or entry.data)[CONF_USERNAME]
+        return self.async_show_form(
+            step_id="reauth_confirm",
+            data_schema=vol.Schema(
+                {vol.Required(CONF_USERNAME, default=username): str, vol.Required(CONF_PASSWORD): str}
+            ),
+            description_placeholders={"host": entry.data[CONF_HOST]},
+            errors=errors,
         )
 
     def _move_controller_ids(self, entry_id: str, old_host: str, new_host: str) -> None:

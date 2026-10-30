@@ -7,7 +7,7 @@ import pytest
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.components.button import SERVICE_PRESS
 from homeassistant.components.select import ATTR_OPTION, SERVICE_SELECT_OPTION
-from homeassistant.config_entries import ConfigEntryState
+from homeassistant.config_entries import SOURCE_REAUTH, ConfigEntryState
 from homeassistant.const import ATTR_ENTITY_ID, STATE_OFF, STATE_ON, STATE_UNAVAILABLE, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
@@ -16,7 +16,10 @@ from homeassistant.helpers import (
     entity_registry as er,
 )
 from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_time_changed
-from wyrestorm_networkhd.exceptions import ConnectionError as NHDConnectionError
+from wyrestorm_networkhd.exceptions import (
+    AuthenticationError,
+    ConnectionError as NHDConnectionError,
+)
 from wyrestorm_networkhd.models.api_notifications import NotificationEndpoint, NotificationVideo
 from wyrestorm_networkhd.models.api_query import DeviceJsonString, Matrix
 
@@ -267,3 +270,31 @@ async def test_diagnostics(hass: HomeAssistant, setup_integration: MockConfigEnt
     assert HOST not in str(diag)
     assert "networkhd" not in str(diag["entry"]["data"])
     assert diag["data"]["device_controller"]["core_version"] == "9.4.13"
+
+
+async def test_setup_auth_failed_starts_reauth(
+    hass: HomeAssistant, config_entry: MockConfigEntry, mock_client: MagicMock
+) -> None:
+    """Rejected credentials stop retrying and start a reauth flow."""
+    mock_client.connect.side_effect = AuthenticationError("wyrestorm", HOST)
+    await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert config_entry.state is ConfigEntryState.SETUP_ERROR
+    flows = hass.config_entries.flow.async_progress_by_handler(DOMAIN)
+    assert [f["context"]["source"] for f in flows] == [SOURCE_REAUTH]
+
+
+async def test_update_auth_failed_starts_reauth(
+    hass: HomeAssistant, setup_integration: MockConfigEntry, mock_client: MagicMock, freezer: FrozenDateTimeFactory
+) -> None:
+    """Credentials rejected on reconnect start a reauth flow."""
+    mock_client.is_connected.return_value = False
+    mock_client.connect.side_effect = AuthenticationError("wyrestorm", HOST)
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+
+    assert hass.states.get(LINK_RX1).state == STATE_UNAVAILABLE
+    flows = hass.config_entries.flow.async_progress_by_handler(DOMAIN)
+    assert [f["context"]["source"] for f in flows] == [SOURCE_REAUTH]
