@@ -363,6 +363,9 @@ firewall blocks that port between Home Assistant and the controller, the entry s
 still works but means discovery cannot follow an address change. Allow UDP 5353 from Home Assistant to the controller
 and restart, or give the controller a fixed address.
 
+If such a controller changes IP address, discovery may offer it as a new controller. Do not accept it (that would
+add the controller twice); use **Reconfigure** on the existing entry to enter the new address instead.
+
 To enable debug logging, add this to `configuration.yaml` and restart:
 
 ```yaml
