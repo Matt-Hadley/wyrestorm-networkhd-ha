@@ -1,5 +1,6 @@
 """Tests for setup, unload, the coordinator and entity availability."""
 
+import asyncio
 from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
@@ -256,7 +257,12 @@ async def test_buttons(hass: HomeAssistant, setup_integration: MockConfigEntry, 
 
     await hass.services.async_call("button", SERVICE_PRESS, {ATTR_ENTITY_ID: REBOOT}, blocking=True)
     api.reboot_reset.set_reboot.assert_awaited_once()
-    mock_client.disconnect.assert_awaited()  # next poll reconnects
+    mock_client.disconnect.assert_awaited()
+    assert hass.states.get(REBOOT).state == STATE_UNAVAILABLE  # until an update reconnects
+    assert hass.states.get(LINK_RX1).state == STATE_UNAVAILABLE
+
+    await setup_integration.runtime_data.async_refresh()
+    assert hass.states.get(LINK_RX1).state == STATE_ON
 
     api.reboot_reset.set_reboot.side_effect = TimeoutError()
     with pytest.raises(HomeAssistantError) as err:
@@ -298,3 +304,77 @@ async def test_update_auth_failed_starts_reauth(
     assert hass.states.get(LINK_RX1).state == STATE_UNAVAILABLE
     flows = hass.config_entries.flow.async_progress_by_handler(DOMAIN)
     assert [f["context"]["source"] for f in flows] == [SOURCE_REAUTH]
+
+
+async def test_commands_reconnect(
+    hass: HomeAssistant, setup_integration: MockConfigEntry, mock_client: MagicMock
+) -> None:
+    """A command after a dropped link reconnects first."""
+    connects = mock_client.connect.await_count
+    mock_client.is_connected.return_value = False
+    await hass.services.async_call("button", SERVICE_PRESS, {ATTR_ENTITY_ID: POWER_ON_RX1}, blocking=True)
+    await hass.services.async_call(
+        "select", SERVICE_SELECT_OPTION, {ATTR_ENTITY_ID: SOURCE_RX1, ATTR_OPTION: "Source1"}, blocking=True
+    )
+    assert mock_client.connect.await_count == connects + 2
+    mock_client.api.connected_device_control.config_set_device_sinkpower.assert_awaited_once()
+
+    mock_client.connect.side_effect = NHDConnectionError("no route")
+    with pytest.raises(HomeAssistantError) as err:
+        await hass.services.async_call("button", SERVICE_PRESS, {ATTR_ENTITY_ID: POWER_ON_RX1}, blocking=True)
+    assert err.value.translation_key == "command_failed"
+
+
+async def test_select_keeps_poll_schedule(
+    hass: HomeAssistant, setup_integration: MockConfigEntry, mock_client: MagicMock, freezer: FrozenDateTimeFactory
+) -> None:
+    """A matrix change updates entities without postponing the next poll."""
+    query = mock_client.api.api_query
+    polls = query.config_get_device_status.await_count
+    freezer.tick(timedelta(seconds=40))
+    async_fire_time_changed(hass)
+    query.matrix_get.return_value = Matrix.parse("matrix information:\nSource1 Display1\nSource2 Display2")
+    await hass.services.async_call(
+        "select", SERVICE_SELECT_OPTION, {ATTR_ENTITY_ID: SOURCE_RX1, ATTR_OPTION: "Source1"}, blocking=True
+    )
+    assert hass.states.get(SOURCE_RX1).state == "Source1"
+    assert query.config_get_device_status.await_count == polls
+
+    freezer.tick(timedelta(seconds=25))  # 65 s after the last full refresh
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+    assert query.config_get_device_status.await_count == polls + 1
+
+
+async def test_select_readback_failure_refreshes(
+    hass: HomeAssistant, setup_integration: MockConfigEntry, mock_client: MagicMock
+) -> None:
+    """A switch that succeeded is not reported as failed when only the matrix read-back fails."""
+    query = mock_client.api.api_query
+    polls = query.config_get_device_status.await_count
+    matrix = Matrix.parse("matrix information:\nSource1 Display1\nSource2 Display2")
+    query.matrix_get.side_effect = [NHDConnectionError("dropped"), matrix]
+    await hass.services.async_call(
+        "select", SERVICE_SELECT_OPTION, {ATTR_ENTITY_ID: SOURCE_RX1, ATTR_OPTION: "Source1"}, blocking=True
+    )
+    await hass.async_block_till_done()
+
+    assert query.config_get_device_status.await_count == polls + 1  # full refresh instead
+    assert hass.states.get(SOURCE_RX1).state == "Source1"
+
+
+async def test_unload_waits_for_exchange(
+    hass: HomeAssistant, setup_integration: MockConfigEntry, mock_client: MagicMock
+) -> None:
+    """Unload disconnects only after the exchange holding the lock has finished."""
+    lock = setup_integration.runtime_data._lock
+    await lock.acquire()
+    disconnects = mock_client.disconnect.await_count
+    unload = hass.async_create_task(hass.config_entries.async_unload(setup_integration.entry_id))
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    assert mock_client.disconnect.await_count == disconnects
+
+    lock.release()
+    assert await unload
+    assert mock_client.disconnect.await_count == disconnects + 1

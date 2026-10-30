@@ -55,6 +55,7 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
     """
 
     config_entry: WyreStormConfigEntry
+    data: CoordinatorData
 
     def __init__(self, hass: HomeAssistant, entry: WyreStormConfigEntry) -> None:
         """Initialize coordinator."""
@@ -99,21 +100,26 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
         )
 
     async def async_shutdown(self) -> None:
-        """Unsubscribe and disconnect."""
+        """Unsubscribe and disconnect (after any exchange in progress finishes)."""
         await super().async_shutdown()
-        for notification_type in NOTIFICATION_TYPES:
-            with suppress(Exception):
-                self.client.notification_handler.unregister_callback(notification_type, self._on_notification)
-        with suppress(*API_ERRORS):
-            await self.client.disconnect()
+        async with self._lock:
+            for notification_type in NOTIFICATION_TYPES:
+                with suppress(Exception):
+                    self.client.notification_handler.unregister_callback(notification_type, self._on_notification)
+            with suppress(*API_ERRORS):
+                await self.client.disconnect()
+
+    async def _ensure_connected(self) -> None:
+        """Reconnect if the link dropped (call with `_lock` held)."""
+        if not self.client.is_connected():
+            _LOGGER.debug("Not connected to %s, reconnecting", self.host)
+            await self.client.connect()
 
     async def _async_update_data(self) -> CoordinatorData:
         """Fetch all data, reconnecting first if the link dropped."""
         async with self._lock:
             try:
-                if not self.client.is_connected():
-                    _LOGGER.debug("Not connected to %s, reconnecting", self.host)
-                    await self.client.connect()
+                await self._ensure_connected()
                 return await self._fetch()
             except AuthenticationError as err:
                 raise ConfigEntryAuthFailed(f"Controller at {self.host} rejected the credentials") from err
@@ -163,24 +169,36 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
     # Commands
     async def async_set_matrix(self, source: DeviceTransmitter | None, receivers: list[DeviceReceiver]) -> None:
-        """Route `source` to `receivers` (None disconnects them), then refresh the matrix."""
+        """Route `source` to `receivers` (None disconnects them), then re-read the matrix."""
         rx = [r.alias_name for r in receivers]
         switch = self.api.media_stream_matrix_switch
         async with self._lock:
             try:
+                await self._ensure_connected()
                 if source is None:
                     await switch.matrix_set_null(rx)
                 else:
                     await switch.matrix_set(source.alias_name, rx)
-                matrix = await self.api.api_query.matrix_get()
             except API_ERRORS as err:
                 raise self._command_failed(err) from err
-            self.async_set_updated_data(replace(self.data, matrix_assignments=process_matrix_assignments(matrix)))
+            try:
+                matrix = await self.api.api_query.matrix_get()
+            except API_ERRORS as err:
+                # The switch succeeded; only the read-back failed, so let a full refresh catch up.
+                _LOGGER.debug("Matrix read-back from %s failed: %s", self.host, err)
+                self.config_entry.async_create_background_task(
+                    self.hass, self.async_request_refresh(), f"{DOMAIN} matrix refresh"
+                )
+                return
+        # Not async_set_updated_data: that would cancel a pending debounced refresh and reset the poll timer.
+        self.data = replace(self.data, matrix_assignments=process_matrix_assignments(matrix))
+        self.async_update_listeners()
 
     async def async_set_power(self, receivers: list[DeviceReceiver], power_state: Literal["on", "off"]) -> None:
         """Send display power on/off to the displays attached to `receivers` (no refresh needed)."""
         async with self._lock:
             try:
+                await self._ensure_connected()
                 await self.api.connected_device_control.config_set_device_sinkpower(
                     power=power_state, rx=[r.alias_name for r in receivers]
                 )
@@ -188,11 +206,13 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 raise self._command_failed(err) from err
 
     async def async_reboot(self) -> None:
-        """Reboot the controller; the next update reconnects once it is back."""
+        """Reboot the controller; entities are unavailable until an update reconnects once it is back."""
         async with self._lock:
             try:
+                await self._ensure_connected()
                 await self.api.reboot_reset.set_reboot()
             except API_ERRORS as err:
                 raise self._command_failed(err) from err
             with suppress(*API_ERRORS):
                 await self.client.disconnect()
+        self.async_set_update_error(UpdateFailed(f"Controller at {self.host} is rebooting"))
