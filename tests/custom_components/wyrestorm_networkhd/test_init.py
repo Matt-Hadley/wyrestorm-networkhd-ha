@@ -415,8 +415,10 @@ async def test_reconnect_host_key_mismatch(
     mock_client: MagicMock,
     issue_registry: ir.IssueRegistry,
     freezer: FrozenDateTimeFactory,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """A mismatch on reconnect makes entities unavailable and raises the repair issue."""
+    """A mismatch on reconnect fails the update (not the entry), raises the repair issue and recovers."""
+    issue_id = f"host_key_mismatch_{setup_integration.entry_id}"
     mock_client.is_connected.return_value = False
     mock_client.connect.side_effect = HostKeyMismatchError(HOST, OTHER_FINGERPRINT)
     freezer.tick(timedelta(seconds=61))
@@ -424,13 +426,38 @@ async def test_reconnect_host_key_mismatch(
     await hass.async_block_till_done()
 
     assert hass.states.get(LINK_RX1).state == STATE_UNAVAILABLE
-    assert issue_registry.async_get_issue(DOMAIN, f"host_key_mismatch_{setup_integration.entry_id}")
+    assert issue_registry.async_get_issue(DOMAIN, issue_id)
+    assert setup_integration.state is ConfigEntryState.LOADED
+    assert "Config entry setup failed" not in caplog.text
+    assert f"presented SSH host key {OTHER_FINGERPRINT}, which does not match" in caplog.text
+
+    # The pinned key comes back: the next poll reconnects and clears the issue.
+    mock_client.connect.side_effect = None
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+    assert hass.states.get(LINK_RX1).state == STATE_ON
+    assert issue_registry.async_get_issue(DOMAIN, issue_id) is None
+
+
+async def test_remove_entry_deletes_issue(
+    hass: HomeAssistant, config_entry: MockConfigEntry, mock_client: MagicMock, issue_registry: ir.IssueRegistry
+) -> None:
+    """Removing the entry deletes its host key repair issue."""
+    mock_client.connect.side_effect = HostKeyMismatchError(HOST, OTHER_FINGERPRINT)
+    await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    assert issue_registry.async_get_issue(DOMAIN, f"host_key_mismatch_{config_entry.entry_id}")
+
+    assert await hass.config_entries.async_remove(config_entry.entry_id)
+    await hass.async_block_till_done()
+    assert issue_registry.async_get_issue(DOMAIN, f"host_key_mismatch_{config_entry.entry_id}") is None
 
 
 async def test_upgrade_pins_presented_key(
     hass: HomeAssistant, mock_client: MagicMock, freezer: FrozenDateTimeFactory, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """A 1.0.x entry (no fingerprint) connects unpinned once, then records the key and reconnects pinned."""
+    """A 1.0.x entry (no fingerprint) connects unpinned once, then records the key and pins the same client."""
     entry = MockConfigEntry(domain=DOMAIN, unique_id=HOST, data=ENTRY_DATA)
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)
@@ -441,12 +468,15 @@ async def test_upgrade_pins_presented_key(
     assert entry.state is ConfigEntryState.LOADED
     assert caplog.text.count("Pinned the SSH host key") == 1
 
-    # The link drops: the reconnect uses a new client built with the pinned key, still subscribed.
+    assert mock_client.host_key_fingerprints == (FINGERPRINT,)
+
+    # The link drops: the same client reconnects, now pinned.
+    connects = mock_client.connect.await_count
     mock_client.is_connected.return_value = False
     freezer.tick(timedelta(seconds=61))
     async_fire_time_changed(hass)
     await hass.async_block_till_done()
-    assert mock_client.ssh_cls.call_args.kwargs["host_key_fingerprints"] == [FINGERPRINT]
-    assert mock_client.ssh_cls.call_count == 2
-    assert {k: len(v) for k, v in mock_client.notification_handler.callbacks.items()} == {"endpoint": 1, "video": 1}
+    assert mock_client.connect.await_count == connects + 1
+    assert mock_client.ssh_cls.call_count == 1
+    assert hass.states.get(LINK_RX1).state == STATE_ON
     assert caplog.text.count("Pinned the SSH host key") == 1
