@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.0.1](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/compare/v1.0.0...v1.0.1) (2026-10-30)
+
+
+### Bug Fixes
+
+* 1.0.1 — reauth, reconnect before commands, service input validation ([95b0bc3](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/95b0bc3d4c0ee240ebd06dab2e6da7f58603816c))
+* reconnect before commands and keep entity state honest after them ([823da21](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/823da212fb75ae194d971420b605c50f54243bae))
+* reject empty device lists and an empty source in services ([80277ff](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/80277ffc63516f4ee1a3cac24a1bda2c7bb5a65b))
+* require Home Assistant 2026.8 ([97529a1](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/97529a15e63d76428eed6caa12daec9b0de7d088))
+* start a reauth flow when the controller rejects the credentials ([6697719](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/66977191a52ec154ada236da3c08b2f8c53c13d1))
+
+
+### Documentation
+
+* space-free alias examples, reauth, known limitations ([e71dcf3](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/e71dcf3fca195fbddf41f759f5e61f70821600ee))
+
 ## [1.0.0](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/compare/v0.2.4...v1.0.0) (2026-10-30)
 
 
