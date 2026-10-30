@@ -1,6 +1,7 @@
 """Tests for setup, unload, the coordinator and entity availability."""
 
 import asyncio
+from dataclasses import replace
 from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -27,8 +28,13 @@ from wyrestorm_networkhd.models.api_notifications import NotificationEndpoint, N
 from wyrestorm_networkhd.models.api_query import DeviceJsonString, Matrix
 
 from custom_components.wyrestorm_networkhd import async_remove_config_entry_device
+from custom_components.wyrestorm_networkhd.binary_sensor import (
+    WyreStormControllerLinkSensor,
+    WyreStormVideoOutputSensor,
+)
 from custom_components.wyrestorm_networkhd.const import CONF_HOST_KEY_FINGERPRINT, DOMAIN
 from custom_components.wyrestorm_networkhd.diagnostics import async_get_config_entry_diagnostics
+from custom_components.wyrestorm_networkhd.select import WyreStormReceiverSourceSelect
 
 from .conftest import ENTRY_DATA, FINGERPRINT, HOST, MAC, OTHER_FINGERPRINT, PINNED_DATA, RAW, parsed_responses
 
@@ -651,3 +657,26 @@ async def test_remove_device_manually(
     drop_endpoint(mock_client.api.api_query, "Display1")
     await poll(hass, freezer)
     assert await async_remove_config_entry_device(hass, entry, rx1)
+
+
+async def test_entities_without_data(
+    hass: HomeAssistant, setup_integration: MockConfigEntry, mock_client: MagicMock
+) -> None:
+    """Entities whose endpoint just vanished, or with an unparsable frame rate, report nothing instead of failing."""
+    coordinator = setup_integration.runtime_data
+    rx = coordinator.data.device_receivers["NHD-400-RX-E4CE02BB0001"]
+    link = WyreStormControllerLinkSensor(coordinator, rx, "controller_link")
+    video = WyreStormVideoOutputSensor(coordinator, replace(rx, hdmi_out_frame_rate="n/a"), "video_output")
+    select = WyreStormReceiverSourceSelect(coordinator, rx, "source")
+
+    coordinator.data = replace(
+        coordinator.data, device_receivers={rx.true_name: replace(rx, hdmi_out_frame_rate="n/a")}
+    )
+    assert video.is_on is False
+
+    coordinator.data = replace(coordinator.data, device_receivers={})
+    assert link.is_on is None
+    assert link.extra_state_attributes == {}
+    assert select.current_option is None
+    await select.async_select_option("Source1")  # raced with a refresh that dropped the receiver: ignored
+    mock_client.api.media_stream_matrix_switch.matrix_set.assert_not_awaited()
