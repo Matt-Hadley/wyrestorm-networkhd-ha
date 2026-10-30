@@ -16,7 +16,7 @@
           "username": "SSH username for the controller (default: wyrestorm)",
           "password": "SSH password for the controller (default: networkhd)",
           "port": "SSH port for the controller (default: 10022)",
-          "host_key_fingerprint": "Pins the controller's SSH key so Home Assistant only sends the credentials to that controller. Get it with `ssh-keyscan -p 10022 <host> | ssh-keygen -lf -` and paste the SHA256 line(s); several are allowed. Leave empty to trust the key the controller presents now (you are asked to confirm it)."
+          "host_key_fingerprint": "Pins the controller's SSH key so Home Assistant only sends the credentials to that controller. Get it with `ssh-keyscan -p 10022 CONTROLLER_IP | ssh-keygen -lf -` and paste the SHA256 line(s); several are allowed. Leave empty to trust the key the controller presents now (you are asked to confirm it)."
         }
       },
       "reconfigure": {
@@ -34,7 +34,7 @@
           "username": "SSH username for the controller",
           "password": "SSH password for the controller",
           "port": "SSH port for the controller",
-          "host_key_fingerprint": "Pins the controller's SSH key so Home Assistant only sends the credentials to that controller. Get it with `ssh-keyscan -p 10022 <host> | ssh-keygen -lf -` and paste the SHA256 line(s); several are allowed. Leave empty to trust the key the controller presents now (you are asked to confirm it)."
+          "host_key_fingerprint": "Pins the controller's SSH key so Home Assistant only sends the credentials to that controller. Get it with `ssh-keyscan -p 10022 CONTROLLER_IP | ssh-keygen -lf -` and paste the SHA256 line(s); several are allowed. Leave empty to trust the key the controller presents now (you are asked to confirm it)."
         }
       },
       "confirm_host_key": {
