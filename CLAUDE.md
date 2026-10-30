@@ -26,8 +26,9 @@ the controller and provides entities for monitoring and control.
    HA's debouncer collapses bursts.
 3. **Matrix changes** (`async_set_matrix`) re-read only `matrix get`.
 4. **Display power**: no refresh (it does not change device status).
-5. **Device info** is cached on the coordinator for 10 minutes (monotonic timestamp) and invalidated by endpoint
-   notifications.
+5. **Device info** and the controller version are cached on the coordinator for 10 minutes (monotonic timestamp) and
+   invalidated by endpoint notifications and reconnects. Each update writes alias (device name) and firmware changes to
+   the device registry (`_update_devices`).
 6. **Link loss**: a failed update raises `UpdateFailed` (entities go unavailable; DataUpdateCoordinator logs once on
    loss and once on recovery) and disconnects; the next update or command reconnects (`_ensure_connected`, under the
    lock). Rejected credentials raise `ConfigEntryAuthFailed` (reauth flow).
@@ -38,8 +39,9 @@ the controller and provides entities for monitoring and control.
 ### Devices and Entities
 
 - The controller device is registered in `async_setup_entry` with identifier `(DOMAIN, coordinator.controller_id)` (the
-  entry unique_id when it is a MAC, else the host); endpoint devices use `(DOMAIN, true_name)`, their MAC as a
-  connection, and `via_device_id=coordinator.controller_device_id`.
+  entry unique_id when it is a MAC, else the host); endpoint devices use `(DOMAIN, true_name)`, the true name without
+  its MAC as model and the true name as serial number, their MAC as a connection, and
+  `via_device_id=coordinator.controller_device_id` (`via_device` is deprecated).
 - The SSH API exposes no MAC/serial, so the unique_id is the controller MAC (12 lowercase hex digits) from its mDNS
   instance name (`mdns.py`: unicast PTR query for `_workstation._tcp.local.` to host:5353, or the zeroconf discovery
   name). A controller that does not answer is identified by its host; `async_setup_entry` retries the lookup at every
@@ -145,8 +147,8 @@ made-up MACs, generic aliases only).
 
 ## 📊 Performance Notes
 
-- A full refresh sends five commands (four when device info is cached). Keep targeted paths (matrix-only refresh, no
-  refresh after display power) targeted.
+- A full refresh sends five commands (three when the device info and version are cached). Keep targeted paths
+  (matrix-only refresh, no refresh after display power) targeted.
 
 ## 🐛 Debugging Tips
 

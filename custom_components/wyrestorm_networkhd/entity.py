@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Iterable
 
 from homeassistant.core import callback
@@ -34,7 +35,8 @@ class WyreStormEndpointEntity(CoordinatorEntity[WyreStormCoordinator]):
             connections={(CONNECTION_NETWORK_MAC, device.mac)} if device.mac else set(),
             name=device.get_device_display_name(),
             manufacturer="WyreStorm",
-            model=device.true_name,
+            model=re.sub("-[0-9A-F]{12}$", "", device.true_name, flags=re.IGNORECASE),  # e.g. NHD-400-RX
+            serial_number=device.true_name,  # model and MAC
             sw_version=device.version,
             via_device_id=coordinator.controller_device_id,
         )

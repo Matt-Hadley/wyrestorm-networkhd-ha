@@ -3,13 +3,14 @@
 import asyncio
 from dataclasses import replace
 from datetime import timedelta
+from types import MappingProxyType
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.components.button import SERVICE_PRESS
 from homeassistant.components.select import ATTR_OPTION, SERVICE_SELECT_OPTION
-from homeassistant.config_entries import SOURCE_REAUTH, ConfigEntryState
+from homeassistant.config_entries import SOURCE_REAUTH, ConfigEntryState, DiscoveryKey
 from homeassistant.const import ATTR_ENTITY_ID, STATE_OFF, STATE_ON, STATE_UNAVAILABLE, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
@@ -167,6 +168,42 @@ async def test_entities(
     controller = dev_reg.async_get_device_by_identifier((DOMAIN, HOST), config_entry.entry_id)
     rx = dev_reg.async_get_device_by_identifier((DOMAIN, "NHD-400-RX-E4CE02BB0001"), config_entry.entry_id)
     assert rx.via_device_id == controller.id
+    assert (rx.model, rx.serial_number) == ("NHD-400-RX", "NHD-400-RX-E4CE02BB0001")
+
+
+async def test_devices_follow_renames_and_firmware(
+    hass: HomeAssistant, setup_integration: MockConfigEntry, mock_client: MagicMock, freezer: FrozenDateTimeFactory
+) -> None:
+    """An alias rename and new firmware versions reach the device registry at the next refresh."""
+    query = mock_client.api.api_query
+    for method, attr in [
+        (query.config_get_devicejsonstring, "aliasName"),
+        (query.config_get_device_status, "aliasname"),
+        (query.config_get_device_info, "aliasname"),
+    ]:
+        method.return_value = [
+            replace(d, **{attr: "Lounge"}) if getattr(d, attr) == "Display1" else d for d in method.return_value
+        ]
+    info = query.config_get_device_info.return_value
+    query.config_get_device_info.return_value = [
+        replace(d, version="9.9.9") if d.aliasname == "Lounge" else d for d in info
+    ]
+    query.config_get_version.return_value = replace(query.config_get_version.return_value, core_version="9.9.10")
+    mock_client.notification_handler.fire("endpoint", NotificationEndpoint(online=True, device="Lounge"))
+    await poll(hass, freezer)
+
+    dev_reg = dr.async_get(hass)
+    entry_id = setup_integration.entry_id
+    rx = dev_reg.async_get_device_by_identifier((DOMAIN, "NHD-400-RX-E4CE02BB0001"), entry_id)
+    assert (rx.name, rx.sw_version) == ("Receiver - Lounge", "9.9.9")
+    assert dev_reg.async_get_device_by_identifier((DOMAIN, HOST), entry_id).sw_version == "9.9.10"
+    assert hass.states.get(LINK_RX1)  # entity ids do not change
+
+    # While an endpoint has no device info (offline), its last known firmware version is kept.
+    query.config_get_device_info.return_value = [d for d in info if d.aliasname != "Lounge"]
+    mock_client.notification_handler.fire("endpoint", NotificationEndpoint(online=False, device="Lounge"))
+    await poll(hass, freezer)
+    assert dev_reg.async_get_device_by_identifier((DOMAIN, "NHD-400-RX-E4CE02BB0001"), entry_id).sw_version == "9.9.9"
 
 
 async def test_drop_unavailable_reconnect(
@@ -245,6 +282,7 @@ async def test_notifications_trigger_debounced_refresh(
     assert hass.states.get(VIDEO_TX1).state == STATE_OFF
     assert query.config_get_device_status.await_count <= calls + 2  # 3 notifications, debounced
     assert query.config_get_device_info.await_count == 2  # endpoint notification invalidated the cache
+    assert query.config_get_version.await_count == 2  # read with the device info
 
 
 async def test_select_source(hass: HomeAssistant, setup_integration: MockConfigEntry, mock_client: MagicMock) -> None:
@@ -287,8 +325,14 @@ async def test_buttons(hass: HomeAssistant, setup_integration: MockConfigEntry, 
 
 
 async def test_diagnostics(hass: HomeAssistant, setup_integration: MockConfigEntry) -> None:
-    """Diagnostics redact the host, credentials and addresses."""
+    """Diagnostics redact the host, credentials, addresses and discovery keys."""
+    discovery_key = DiscoveryKey(domain="zeroconf", key=("_workstation._tcp.local.", f"NHD-000-CTL-{MAC}"), version=1)
+    hass.config_entries.async_update_entry(
+        setup_integration, discovery_keys=MappingProxyType({"zeroconf": (discovery_key,)})
+    )
     diag = await async_get_config_entry_diagnostics(hass, setup_integration)
+    assert MAC not in str(diag)
+    assert diag["entry"]["discovery_keys"] == "**REDACTED**"
     assert HOST not in str(diag)
     assert "networkhd" not in str(diag["entry"]["data"])
     assert diag["host_key_pinned"] is True
@@ -403,12 +447,12 @@ async def test_unload_waits_for_exchange(
 async def test_setup_host_key_mismatch(
     hass: HomeAssistant, config_entry: MockConfigEntry, mock_client: MagicMock, issue_registry: ir.IssueRegistry
 ) -> None:
-    """A pinned key mismatch stops retrying and raises a repair issue; a later good connect clears it."""
+    """A pinned key mismatch at setup is retried (no credentials sent) with a repair issue; a good connect clears it."""
     mock_client.connect.side_effect = HostKeyMismatchError(HOST, OTHER_FINGERPRINT)
     await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
 
-    assert config_entry.state is ConfigEntryState.SETUP_ERROR
+    assert config_entry.state is ConfigEntryState.SETUP_RETRY
     assert mock_client.ssh_cls.call_args.kwargs["host_key_fingerprints"] == [FINGERPRINT]
     issue = issue_registry.async_get_issue(DOMAIN, f"host_key_mismatch_{config_entry.entry_id}")
     assert issue.translation_key == "host_key_mismatch"

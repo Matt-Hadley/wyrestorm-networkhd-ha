@@ -162,10 +162,11 @@ The examples below use a controller at `192.0.2.10`, a transmitter with alias `S
 
 The controller pushes a notification when an endpoint goes online or offline and when a transmitter or receiver finds or
 loses video; each one triggers a refresh (bursts are collapsed into one refresh, at most every 10 seconds). The
-integration also polls the controller every 60 seconds as a fallback. A refresh sends four commands over the one SSH
-connection (the device info, with MAC addresses and firmware versions, is re-read only every 10 minutes or after an
-endpoint notification). Changing a receiver's source re-reads only the routing; display power commands do not refresh,
-because the controller does not report display power.
+integration also polls the controller every 60 seconds as a fallback. A refresh sends three commands over the one SSH
+connection (the device info, with MAC addresses and firmware versions, and the controller's version are re-read only
+every 10 minutes, after an endpoint notification or after reconnecting). Alias renames and firmware updates show on the
+devices at the next refresh that reads them. Changing a receiver's source re-reads only the routing; display power
+commands do not refresh, because the controller does not report display power.
 
 The polling interval is fixed. The controller answers one command at a time, so polling faster would delay your
 commands. To poll on your own schedule instead, disable polling in the entry's **System options** and call
@@ -283,7 +284,9 @@ automation:
 ## Diagnostics
 
 On the integration entry, choose **Download diagnostics**. The file contains the entry, the latest controller data and
-the raw device status and info, with the host, username, password, IP addresses, gateway and MAC addresses redacted.
+the raw device status and info, with the host, username, password, IP addresses, gateway, MAC address fields and
+discovery details redacted. Endpoint true names (for example `NHD-400-RX-E4CE02BB0001`) are kept: they identify the
+devices and contain the endpoint's MAC address.
 
 ## Security
 
@@ -305,9 +308,10 @@ an RSA key and the integration negotiates ECDSA, so paste both lines or the ECDS
 If the controller presents a different key later, entities go unavailable and a repair issue is shown with the presented
 fingerprint; Home Assistant keeps checking at each poll without sending credentials (the key is rejected before login),
 and recovers automatically if the pinned key comes back. (If the key differs when the entry is set up, at startup or on
-reload, the entry stops without retrying.) If you expect the change (the controller was replaced or reset), use
-**Reconfigure** to enter the new fingerprint or clear the field to confirm the new key. Otherwise find out what is
-answering at the controller's address. Diagnostics show whether a key is pinned and the pinned fingerprint.
+reload, setup is retried the same way, so a new address found by discovery is picked up.) If you expect the change (the
+controller was replaced or reset), use **Reconfigure** to enter the new fingerprint or clear the field to confirm the
+new key. Otherwise find out what is answering at the controller's address. Diagnostics show whether a key is pinned and
+the pinned fingerprint.
 
 ## Known limitations
 
