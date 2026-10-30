@@ -27,6 +27,9 @@ This is a Home Assistant integration for WyreStorm NetworkHD matrix switching sy
 - Endpoints missing from device status/info (usually offline) are kept: the Controller link sensor shows off, the other entities are unavailable.
 - Endpoint entities subclass `WyreStormEndpointEntity` (entity.py); names come from `translation_key` in strings.json, icons from icons.json.
 
+### Discovery
+`manifest.json` matches `_workstation._tcp.local.` instances named `nhd-*ctl*` (HA lowercases names before fnmatch). `async_step_zeroconf` takes the MAC from the instance name, updates the host of a known entry (the pinned host key stays, so another device at that address is still refused), aborts for an entry known by host, and otherwise asks for credentials in `zeroconf_confirm` (then the same TOFU host key confirmation as the user step).
+
 ### Services
 `matrix_set` (`source_device` optional = disconnect, `target_device`) and `power_control` (`devices`, `power_state`) are registered once in `async_setup` (services.py). Devices are matched by alias or true name; the controller is the one loaded entry that has all of them, or `config_entry_id` when ambiguous. Bad input raises `ServiceValidationError`.
 
@@ -56,6 +59,7 @@ custom_components/wyrestorm_networkhd/
 ├── services.py              # matrix_set / power_control
 ├── entity.py                # Base entity for endpoint devices
 ├── config_flow.py           # User, zeroconf, reconfigure and reauth flows
+├── mdns.py                  # Controller MAC from its mDNS name (unicast PTR lookup)
 ├── diagnostics.py           # Redacted diagnostics
 ├── const.py                 # Constants
 ├── services.yaml, strings.json, translations/en.json, icons.json

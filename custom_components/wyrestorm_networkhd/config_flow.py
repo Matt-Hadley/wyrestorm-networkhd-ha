@@ -16,6 +16,7 @@ from homeassistant.config_entries import (
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_PORT, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.selector import TextSelector, TextSelectorConfig
+from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 
 from wyrestorm_networkhd import NHDAPI, HostKeyMismatchError, normalize_fingerprints
 from wyrestorm_networkhd.exceptions import AuthenticationError
@@ -29,20 +30,21 @@ from .const import (
     DOMAIN,
 )
 from .coordinator import API_ERRORS, create_client
-from .mdns import async_lookup_mac, is_mac
+from .mdns import async_lookup_mac, is_mac, mac_from_name
 
 _LOGGER = logging.getLogger(__name__)
 
 
-def get_config_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
-    """Get the connection schema with optional defaults."""
+def get_config_schema(defaults: dict[str, Any] | None = None, *, with_host: bool = True) -> vol.Schema:
+    """Get the connection schema with optional defaults (without the host field for a discovered controller)."""
     defaults = defaults or {}
     fingerprint = defaults.get(CONF_HOST_KEY_FINGERPRINT) or ""
     if not isinstance(fingerprint, str):  # stored entry data holds a list
         fingerprint = "\n".join(fingerprint)
+    host = {vol.Required(CONF_HOST, default=defaults.get(CONF_HOST, "")): str} if with_host else {}
     return vol.Schema(
         {
-            vol.Required(CONF_HOST, default=defaults.get(CONF_HOST, "")): str,
+            **host,
             vol.Required(CONF_USERNAME, default=defaults.get(CONF_USERNAME, DEFAULT_USERNAME)): str,
             vol.Required(CONF_PASSWORD, default=defaults.get(CONF_PASSWORD, DEFAULT_PASSWORD)): str,
             vol.Optional(CONF_PORT, default=defaults.get(CONF_PORT, DEFAULT_PORT)): int,
@@ -93,6 +95,7 @@ class WyreStormConfigFlow(ConfigFlow, domain=DOMAIN):
         self._pending: dict[str, Any] = {}  # validated data waiting for confirm_host_key
         self._placeholders: dict[str, str] = {"fingerprint": "-"}  # presented fingerprint, shown in errors
         self._presented: str | None = None  # fingerprint presented by the last successful connection test
+        self._host = ""  # discovered controller
 
     async def _async_try_connect(self, data: dict[str, Any]) -> dict[str, str]:
         """Return form errors for `data` (empty if the controller answered); learns the presented key."""
@@ -125,7 +128,7 @@ class WyreStormConfigFlow(ConfigFlow, domain=DOMAIN):
             return await self.async_step_confirm_host_key()
         return self.async_show_form(
             step_id=step_id,
-            data_schema=get_config_schema(user_input),
+            data_schema=get_config_schema(user_input, with_host=step_id != "zeroconf_confirm"),
             errors=errors,
             description_placeholders=self._placeholders,
         )
@@ -162,6 +165,28 @@ class WyreStormConfigFlow(ConfigFlow, domain=DOMAIN):
         self._abort_if_unique_id_configured()
         self._async_abort_entries_match({CONF_HOST: host})
         return await self._async_connect_and_finish("user", user_input, {})
+
+    async def async_step_zeroconf(self, discovery_info: ZeroconfServiceInfo) -> ConfigFlowResult:
+        """Handle a controller found by its mDNS announcement; a known one gets its new address."""
+        if not (mac := mac_from_name(discovery_info.name)):
+            return self.async_abort(reason="no_mac")
+        self._host = discovery_info.host
+        await self.async_set_unique_id(mac)
+        # Only the host changes: the pinned host key still has to match, so another device at that address is refused.
+        self._abort_if_unique_id_configured(updates={CONF_HOST: self._host})
+        self._async_abort_entries_match({CONF_HOST: self._host})  # configured, but identified by host so far
+        self.context["title_placeholders"] = {"host": self._host}
+        return await self.async_step_zeroconf_confirm()
+
+    async def async_step_zeroconf_confirm(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Ask for the SSH credentials of the discovered controller."""
+        if user_input is not None:
+            return await self._async_connect_and_finish("zeroconf_confirm", user_input, {CONF_HOST: self._host})
+        return self.async_show_form(
+            step_id="zeroconf_confirm",
+            data_schema=get_config_schema(with_host=False),
+            description_placeholders={"host": self._host, **self._placeholders},
+        )
 
     async def async_step_reconfigure(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Change the connection details or host key; a new host must be the same controller if it answers mDNS."""

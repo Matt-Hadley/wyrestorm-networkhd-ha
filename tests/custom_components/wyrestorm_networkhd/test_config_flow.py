@@ -1,9 +1,13 @@
 """Tests for the config flow."""
 
+import fnmatch
+import json
+from ipaddress import ip_address
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from homeassistant.config_entries import SOURCE_USER
+from homeassistant.config_entries import SOURCE_USER, SOURCE_ZEROCONF
 from homeassistant.const import CONF_HOST, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
@@ -11,6 +15,7 @@ from homeassistant.helpers import (
     device_registry as dr,
     entity_registry as er,
 )
+from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from wyrestorm_networkhd import HostKeyMismatchError
 from wyrestorm_networkhd.exceptions import (
@@ -23,6 +28,26 @@ from custom_components.wyrestorm_networkhd.const import CONF_HOST_KEY_FINGERPRIN
 from .conftest import ENTRY_DATA, FINGERPRINT, HOST, MAC, OTHER_FINGERPRINT, PINNED_DATA
 
 NEW_HOST = "192.0.2.20"
+
+
+def zeroconf_info(host: str = HOST, name: str = "NHD-000-CTL-E4CE02AABBCC [e4:ce:02:aa:bb:cc]") -> ZeroconfServiceInfo:
+    """The controller's _workstation._tcp announcement (made-up MAC)."""
+    return ZeroconfServiceInfo(
+        ip_address=ip_address(host),
+        ip_addresses=[ip_address(host)],
+        port=9,
+        hostname="NHD-000-CTL-E4CE02AABBCC.local.",
+        type="_workstation._tcp.local.",
+        name=f"{name}._workstation._tcp.local.",
+        properties={},
+    )
+
+
+async def start_zeroconf(hass: HomeAssistant, info: ZeroconfServiceInfo | None = None) -> dict:
+    """Start a zeroconf discovery flow."""
+    return await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_ZEROCONF}, data=info or zeroconf_info()
+    )
 
 
 async def test_user_flow_confirms_presented_key(hass: HomeAssistant, mock_client: MagicMock) -> None:
@@ -378,3 +403,85 @@ async def test_reconfigure_onto_host_of_mac_entry(hass: HomeAssistant, setup_int
     result = await hass.config_entries.flow.async_configure(result["flow_id"], {**ENTRY_DATA, CONF_HOST: NEW_HOST})
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "already_configured"
+
+
+async def test_zeroconf_new_controller(hass: HomeAssistant, mock_client: MagicMock) -> None:
+    """A discovered controller asks for credentials (no host), recovers from an error, and is added by MAC."""
+    result = await start_zeroconf(hass)
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "zeroconf_confirm"
+    assert CONF_HOST not in result["data_schema"].schema
+    assert result["description_placeholders"]["host"] == HOST
+    credentials = {k: v for k, v in ENTRY_DATA.items() if k != CONF_HOST}
+
+    mock_client.connect.side_effect = NHDConnectionError("down")
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], credentials)
+    assert result["errors"] == {"base": "cannot_connect"}
+    assert CONF_HOST not in result["data_schema"].schema
+
+    mock_client.connect.side_effect = None
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], credentials)
+    assert result["step_id"] == "confirm_host_key"
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    await hass.async_block_till_done()
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["result"].unique_id == MAC
+    assert result["data"] == PINNED_DATA
+    assert mock_client.ssh_cls.call_args.kwargs["host"] == HOST
+
+
+@pytest.mark.parametrize("host", [HOST, NEW_HOST])
+async def test_zeroconf_known_controller_updates_host(hass: HomeAssistant, mock_client: MagicMock, host: str) -> None:
+    """A known controller (by MAC) aborts; a new address is stored, the pinned key is kept."""
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=MAC, data=PINNED_DATA)
+    entry.add_to_hass(hass)
+    result = await start_zeroconf(hass, zeroconf_info(host))
+    await hass.async_block_till_done()
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "already_configured"
+    assert entry.data == {**PINNED_DATA, CONF_HOST: host}
+
+
+async def test_zeroconf_controller_known_by_host(hass: HomeAssistant, config_entry: MockConfigEntry) -> None:
+    """A controller configured before it was identified by MAC is not offered again."""
+    result = await start_zeroconf(hass)
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "already_configured"
+
+
+async def test_zeroconf_no_mac(hass: HomeAssistant) -> None:
+    """An announcement without a MAC in its name is ignored."""
+    result = await start_zeroconf(hass, zeroconf_info(name="NHD-000-CTL"))
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "no_mac"
+
+
+async def test_user_flow_while_discovered(
+    hass: HomeAssistant, mock_client: MagicMock, mock_lookup_mac: AsyncMock
+) -> None:
+    """Adding the controller by hand while its discovery is pending works, and ends the discovery flow."""
+    await start_zeroconf(hass)
+    mock_lookup_mac.return_value = MAC
+    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER})
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], ENTRY_DATA)
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    await hass.async_block_till_done()
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["result"].unique_id == MAC
+    assert not hass.config_entries.flow.async_progress_by_handler(DOMAIN)
+
+
+@pytest.mark.parametrize(
+    ("name", "matches"),
+    [
+        ("NHD-000-CTL-E4CE02AABBCC [e4:ce:02:aa:bb:cc]", True),
+        ("NHD-CTL-PRO-E4CE02AABBCC [e4:ce:02:aa:bb:cc]", True),
+        ("ubuntu [e4:ce:02:aa:bb:cc]", False),
+    ],
+)
+def test_zeroconf_matcher(name: str, matches: bool) -> None:
+    """The manifest matcher selects NetworkHD controllers the way HA's zeroconf does (fnmatch, lowercased)."""
+    manifest = json.loads((Path(__file__).parents[3] / "custom_components" / DOMAIN / "manifest.json").read_text())
+    [matcher] = manifest["zeroconf"]
+    assert matcher["type"] == "_workstation._tcp.local."
+    assert fnmatch.fnmatchcase(f"{name}._workstation._tcp.local.".lower(), matcher["name"]) is matches
