@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.2.2](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/compare/v1.2.1...v1.2.2) (2026-10-30)
+
+
+### Bug Fixes
+
+* 1.2.2 — final audit fixes, strict typing, least-privilege CI ([5b7afef](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/5b7afefaeb9aca40a49e0699ec85f3092986df8d))
+* keep the stored password out of the reconfigure form, point reauth to Reconfigure on a key mismatch ([301bf10](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/301bf107928ab2737ac0102334ac3f4ac72198bb))
+* retry setup on a host key mismatch, cache the controller version, keep devices current ([3923e5a](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/3923e5a5cc4e1a62645f4e6336e423b249b7cf6f))
+* type-check strictly against Home Assistant 2026.10 ([73bf049](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/73bf04971963a095524b40d04e3ead80dfbe5601))
+
+
+### Documentation
+
+* describe the checks CI runs, private vulnerability reporting ([edf125e](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/edf125e66819bf7c770d9f8c89327564b83e8f67))
+
 ## [1.2.1](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/compare/v1.2.0...v1.2.1) (2026-10-30)
 
 
