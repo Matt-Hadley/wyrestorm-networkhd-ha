@@ -33,7 +33,7 @@
         "data_description": {
           "host": "The IP address or hostname of your NetworkHD controller",
           "username": "SSH username for the controller",
-          "password": "SSH password for the controller",
+          "password": "SSH password for the controller; leave empty to keep the current one",
           "port": "SSH port for the controller",
           "host_key_fingerprint": "Pins the controller's SSH key so Home Assistant only sends the credentials to that controller. Get it with `ssh-keyscan -p 10022 CONTROLLER_IP | ssh-keygen -lf -` and paste the SHA256 line(s); several are allowed. Leave empty to trust the key the controller presents now (you are asked to confirm it)."
         }
@@ -76,6 +76,7 @@
       "invalid_auth": "Invalid authentication",
       "invalid_host_key_fingerprint": "Not a valid SSH host key fingerprint; expected SHA256:... as printed by ssh-keygen -lf",
       "host_key_mismatch": "The controller presented a different SSH host key ({fingerprint}) than the pinned fingerprint, so no credentials were sent. If you expect this (controller replaced or reset), enter this fingerprint instead; otherwise check that the device at this address is your controller.",
+      "host_key_mismatch_reauth": "The controller presented a different SSH host key ({fingerprint}) than the pinned fingerprint, so no credentials were sent. If you expect this (controller replaced or reset), use Reconfigure on the integration entry to accept the new key; otherwise check that the device at this address is your controller.",
       "unknown": "Unexpected error"
     },
     "abort": {

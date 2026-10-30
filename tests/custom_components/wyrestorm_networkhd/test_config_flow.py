@@ -6,9 +6,10 @@ from ipaddress import ip_address
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
+import probatio as vol
 import pytest
 from homeassistant.config_entries import SOURCE_USER, SOURCE_ZEROCONF
-from homeassistant.const import CONF_HOST, Platform
+from homeassistant.const import CONF_HOST, CONF_PASSWORD, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers import (
@@ -156,6 +157,10 @@ async def test_user_flow_errors_then_recover(
     mock_client.connect.side_effect = None
     result = await hass.config_entries.flow.async_configure(result["flow_id"], ENTRY_DATA)
     assert result["step_id"] == "confirm_host_key"
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    await hass.async_block_till_done()
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["data"] == PINNED_DATA
 
 
 async def test_user_flow_duplicate(hass: HomeAssistant, config_entry: MockConfigEntry, mock_client: MagicMock) -> None:
@@ -299,13 +304,47 @@ async def test_reconfigure_clear_fingerprint_relearns(
 async def test_reauth_host_key_mismatch(
     hass: HomeAssistant, setup_integration: MockConfigEntry, mock_client: MagicMock
 ) -> None:
-    """Reauth tests pinned and shows host_key_mismatch with the presented key."""
+    """Reauth tests pinned, points to Reconfigure with the presented key, and recovers if the key returns."""
     result = await setup_integration.start_reauth_flow(hass)
     mock_client.connect.side_effect = HostKeyMismatchError(HOST, OTHER_FINGERPRINT)
     result = await hass.config_entries.flow.async_configure(result["flow_id"], {"username": "a", "password": "b"})
-    assert result["errors"] == {"base": "host_key_mismatch"}
+    assert result["errors"] == {"base": "host_key_mismatch_reauth"}
     assert result["description_placeholders"]["fingerprint"] == OTHER_FINGERPRINT
     assert mock_client.ssh_cls.call_args.kwargs["host_key_fingerprints"] == [FINGERPRINT]
+
+    mock_client.connect.side_effect = None
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {"username": "a", "password": "b"})
+    await hass.async_block_till_done()
+    assert result["reason"] == "reauth_successful"
+    assert setup_integration.data == {**PINNED_DATA, "username": "a", "password": "b"}
+
+
+async def test_reconfigure_keeps_stored_password(
+    hass: HomeAssistant, setup_integration: MockConfigEntry, mock_client: MagicMock
+) -> None:
+    """The reconfigure form never carries the stored password; leaving it empty keeps it."""
+    entry = setup_integration
+    hass.config_entries.async_update_entry(entry, data={**PINNED_DATA, CONF_PASSWORD: "stored-secret"})
+    result = await entry.start_reconfigure_flow(hass)
+    field = next(k for k in result["data_schema"].schema if k == CONF_PASSWORD)
+    assert field.default is vol.UNDEFINED
+    assert "stored-secret" not in str(result)
+
+    no_password = {k: v for k, v in ENTRY_DATA.items() if k != CONF_PASSWORD}
+    mock_client.connect.side_effect = NHDConnectionError("down")
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {**no_password, CONF_PASSWORD: "", CONF_HOST_KEY_FINGERPRINT: FINGERPRINT}
+    )
+    assert result["errors"] == {"base": "cannot_connect"}
+    assert "stored-secret" not in str(result)
+
+    mock_client.connect.side_effect = None
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {**no_password, CONF_HOST_KEY_FINGERPRINT: FINGERPRINT}
+    )
+    await hass.async_block_till_done()
+    assert result["reason"] == "reconfigure_successful"
+    assert entry.data[CONF_PASSWORD] == "stored-secret"
 
 
 async def test_user_flow_unique_id_is_mac(

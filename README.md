@@ -93,8 +93,8 @@ SSH API does not report it); a controller that does not answer mDNS is identifie
 **Reconfigure** on the integration entry changes the host, username, password, port and SSH host key fingerprint. The
 new details are tested before they are saved. Changing the host keeps the same controller device and its entities; if
 the new host announces a different MAC address, it is another controller and reconfigure stops with "different
-controller". The fingerprint field is pre-filled with the pinned key: edit it to pin another key, or clear it to confirm
-the key the controller presents now.
+controller". The password field starts empty; leave it empty to keep the current password. The fingerprint field is
+pre-filled with the pinned key: edit it to pin another key, or clear it to confirm the key the controller presents now.
 
 ### Discovery
 
@@ -111,7 +111,8 @@ at every startup until it answers; that also works across subnets if UDP port 53
 
 If the controller rejects the stored username or password (for example after it was changed on the controller), the
 integration stops retrying and Home Assistant shows a **Reauthenticate** prompt for the entry. Enter the current
-credentials; they are tested before they are saved.
+credentials; they are tested before they are saved. If the controller presents a different SSH host key, use
+**Reconfigure** instead (see [Security](#security)).
 
 ## Devices and entities
 
