@@ -668,18 +668,27 @@ async def test_remove_device_when_not_loaded(hass: HomeAssistant, setup_integrat
 
 
 @pytest.mark.usefixtures("setup_integration")
-async def test_stale_device_shared_with_another_entry_kept(
-    hass: HomeAssistant, mock_client: MagicMock, freezer: FrozenDateTimeFactory
+async def test_stale_device_removed_from_registry(
+    hass: HomeAssistant, setup_integration: MockConfigEntry, mock_client: MagicMock, freezer: FrozenDateTimeFactory
 ) -> None:
-    """A stale device that another config entry also uses is only detached from this entry."""
-    other = MockConfigEntry(domain="other")
-    other.add_to_hass(hass)
+    """A stale device is removed outright (a device belongs to a single config entry since HA 2026)."""
     dev_reg = dr.async_get(hass)
-    rx1 = dev_reg.async_get_or_create(config_entry_id=other.entry_id, identifiers={(DOMAIN, "NHD-400-RX-E4CE02BB0001")})
-    drop_endpoint(mock_client.api.api_query, "Display1")
-    await poll(hass, freezer, 3)
-    assert dev_reg.async_get(rx1.id).config_entries == {other.entry_id}
-    assert er.async_get(hass).async_get(LINK_RX1) is None
+    rx1 = dev_reg.async_get_device(identifiers={(DOMAIN, "NHD-400-RX-E4CE02BB0001")})
+    with patch.object(dev_reg, "async_update_device", wraps=dev_reg.async_update_device) as update:
+        drop_endpoint(mock_client.api.api_query, "Display1")
+        await poll(hass, freezer, 3)
+    assert dev_reg.async_get(rx1.id) is None
+    assert not any("remove_config_entry_id" in call.kwargs for call in update.call_args_list)
+
+
+async def test_stale_update_interval_dropped(hass: HomeAssistant, mock_client: MagicMock) -> None:
+    """The update_interval key left by 1.1 and earlier is removed from the entry data."""
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=HOST, data={**PINNED_DATA, "update_interval": 60})
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert "update_interval" not in entry.data
+    assert entry.data[CONF_HOST_KEY_FINGERPRINT] == [FINGERPRINT]
 
 
 OLD_IP = "192.0.2.99"

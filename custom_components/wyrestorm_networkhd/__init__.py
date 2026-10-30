@@ -33,6 +33,10 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
 async def async_setup_entry(hass: HomeAssistant, entry: WyreStormConfigEntry) -> bool:
     """Set up WyreStorm NetworkHD from a config entry."""
+    if "update_interval" in entry.data:  # option removed in 1.2.0
+        hass.config_entries.async_update_entry(
+            entry, data={k: v for k, v in entry.data.items() if k != "update_interval"}
+        )
     if not is_mac(entry.unique_id):
         await _async_adopt_mac(hass, entry)
     coordinator = WyreStormCoordinator(hass, entry)
