@@ -659,6 +659,82 @@ async def test_remove_device_manually(
     assert await async_remove_config_entry_device(hass, entry, rx1)
 
 
+async def test_remove_device_when_not_loaded(hass: HomeAssistant, setup_integration: MockConfigEntry) -> None:
+    """Device removal is refused (not raised) while the entry is not loaded."""
+    entry = setup_integration
+    rx1 = dr.async_get(hass).async_get_device_by_identifier((DOMAIN, "NHD-400-RX-E4CE02BB0001"), entry.entry_id)
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    assert not await async_remove_config_entry_device(hass, entry, rx1)
+
+
+@pytest.mark.usefixtures("setup_integration")
+async def test_stale_device_shared_with_another_entry_kept(
+    hass: HomeAssistant, mock_client: MagicMock, freezer: FrozenDateTimeFactory
+) -> None:
+    """A stale device that another config entry also uses is only detached from this entry."""
+    other = MockConfigEntry(domain="other")
+    other.add_to_hass(hass)
+    dev_reg = dr.async_get(hass)
+    rx1 = dev_reg.async_get_or_create(config_entry_id=other.entry_id, identifiers={(DOMAIN, "NHD-400-RX-E4CE02BB0001")})
+    drop_endpoint(mock_client.api.api_query, "Display1")
+    await poll(hass, freezer, 3)
+    assert dev_reg.async_get(rx1.id).config_entries == {other.entry_id}
+    assert er.async_get(hass).async_get(LINK_RX1) is None
+
+
+OLD_IP = "192.0.2.99"
+
+
+@pytest.fixture
+def entry_reconfigured_in_1_0(hass: HomeAssistant) -> tuple[MockConfigEntry, dr.DeviceEntry, dr.DeviceEntry]:
+    """An entry reconfigured before 1.0.1: unique_id still the old IP, the controller device keyed by the host.
+
+    Returns the entry, the controller device (with the reboot button) and an orphan device left at the old IP.
+    """
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=OLD_IP, title=f"WyreStorm NetworkHD ({HOST})", data=PINNED_DATA)
+    entry.add_to_hass(hass)
+    dev_reg, ent_reg = dr.async_get(hass), er.async_get(hass)
+    devices = []
+    for host in (HOST, OLD_IP):
+        device = dev_reg.async_get_or_create(config_entry_id=entry.entry_id, identifiers={(DOMAIN, host)})
+        ent_reg.async_get_or_create(
+            Platform.BUTTON, DOMAIN, f"{DOMAIN}_{host}_controller_reboot", config_entry=entry, device_id=device.id
+        )
+        devices.append(device)
+    return entry, *devices
+
+
+@pytest.mark.parametrize("mac", [MAC, None])
+async def test_entry_reconfigured_in_1_0_keeps_controller(
+    hass: HomeAssistant,
+    entry_reconfigured_in_1_0: tuple[MockConfigEntry, dr.DeviceEntry, dr.DeviceEntry],
+    mock_client: MagicMock,
+    mock_lookup_mac: AsyncMock,
+    freezer: FrozenDateTimeFactory,
+    mac: str | None,
+) -> None:
+    """The controller device keyed by the host is kept (moved to the MAC if known); the old-IP orphan goes."""
+    entry, controller, orphan = entry_reconfigured_in_1_0
+    ent_reg = er.async_get(hass)
+    reboot = ent_reg.async_get_entity_id(Platform.BUTTON, DOMAIN, f"{DOMAIN}_{HOST}_controller_reboot")
+    orphan_reboot = ent_reg.async_get_entity_id(Platform.BUTTON, DOMAIN, f"{DOMAIN}_{OLD_IP}_controller_reboot")
+    mock_lookup_mac.return_value = mac
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    controller_id = mac or HOST
+    dev_reg = dr.async_get(hass)
+    assert dev_reg.async_get_device_by_identifier((DOMAIN, controller_id), entry.entry_id).id == controller.id
+    assert ent_reg.async_get(reboot).unique_id == f"{DOMAIN}_{controller_id}_controller_reboot"
+    assert hass.states.get(reboot).state != STATE_UNAVAILABLE
+
+    await poll(hass, freezer, 3)
+    assert dev_reg.async_get(orphan.id) is None
+    assert ent_reg.async_get(orphan_reboot) is None
+    assert dev_reg.async_get(controller.id)
+    assert ent_reg.async_get(reboot).device_id == controller.id
+
+
 async def test_entities_without_data(
     hass: HomeAssistant, setup_integration: MockConfigEntry, mock_client: MagicMock
 ) -> None:

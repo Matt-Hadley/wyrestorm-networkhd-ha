@@ -32,6 +32,7 @@ from .const import (
     DOMAIN,
     SSH_HOST_KEY_POLICY,
 )
+from .mdns import is_mac
 from .models.coordinator import CoordinatorData
 from .models.device_receiver_transmitter import DeviceReceiver, DeviceTransmitter
 
@@ -95,8 +96,11 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
     @property
     def controller_id(self) -> str:
-        """Identifier of the controller device: its MAC once known (the entry unique id), else the host."""
-        return self.config_entry.unique_id or self.host
+        """Identifier of the controller device: its MAC once known (the entry unique id), else the host.
+
+        Not a host unique id: before 1.0.1 reconfigure left it at the old host while the device followed the new one.
+        """
+        return uid if is_mac(uid := self.config_entry.unique_id) else self.host
 
     def device_ids(self, data: CoordinatorData) -> set[str]:
         """Return the identifiers of the devices the controller currently reports, itself included."""
@@ -216,7 +220,7 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 self._missing[device.id] = missing
             else:
                 _LOGGER.info("Removing device %s: the controller at %s no longer reports it", device.name, self.host)
-                dev_reg.async_remove_device(device.id)
+                dev_reg.async_update_device(device.id, remove_config_entry_id=self.config_entry.entry_id)
                 del self._missing[device.id]
 
     async def _fetch(self) -> CoordinatorData:

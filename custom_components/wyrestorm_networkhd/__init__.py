@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_HOST, Platform
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import (
@@ -64,7 +65,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: WyreStormConfigEntry) -
 async def async_remove_config_entry_device(
     hass: HomeAssistant, entry: WyreStormConfigEntry, device_entry: dr.DeviceEntry
 ) -> bool:
-    """Let the user delete a device the controller no longer reports (never a current one)."""
+    """Let the user delete a device the controller no longer reports (never a current one, nor while not loaded)."""
+    if entry.state is not ConfigEntryState.LOADED:
+        return False
     current = entry.runtime_data.device_ids(entry.runtime_data.data)
     return not any(domain == DOMAIN and name in current for domain, name in device_entry.identifiers)
 
@@ -93,7 +96,7 @@ async def _async_adopt_mac(hass: HomeAssistant, entry: WyreStormConfigEntry) -> 
 @callback
 def async_move_controller_id(hass: HomeAssistant, entry: WyreStormConfigEntry, new_id: str) -> None:
     """Move the controller device and its reboot button from the entry's unique id to `new_id`."""
-    old_id = entry.unique_id
+    old_id = uid if is_mac(uid := entry.unique_id) else entry.data[CONF_HOST]  # same rule as controller_id
     dev_reg = dr.async_get(hass)
     if device := dev_reg.async_get_device_by_identifier((DOMAIN, old_id), entry.entry_id):
         dev_reg.async_update_device(device.id, new_identifiers={(DOMAIN, new_id)})
