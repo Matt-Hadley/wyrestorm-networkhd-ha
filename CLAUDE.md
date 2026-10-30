@@ -22,8 +22,8 @@ This is a Home Assistant integration for WyreStorm NetworkHD matrix switching sy
 7. **Matrix changes** update `self.data` and call `async_update_listeners()` (not `async_set_updated_data`, which would cancel a pending debounced refresh and reset the poll timer). The reboot button marks the coordinator failed until the next successful update.
 
 ### Devices and Entities
-- The controller device is registered in `async_setup_entry` with identifier `(DOMAIN, host)`; endpoint devices use `(DOMAIN, true_name)` and `via_device_id=coordinator.controller_device_id`.
-- The controller API exposes no MAC/serial, so the config entry unique_id is the host. Reconfigure with a new host moves the unique_id, the controller device identifier and the reboot button unique_id.
+- The controller device is registered in `async_setup_entry` with identifier `(DOMAIN, coordinator.controller_id)` (the entry unique_id); endpoint devices use `(DOMAIN, true_name)`, their MAC as a connection, and `via_device_id=coordinator.controller_device_id`.
+- The SSH API exposes no MAC/serial, so the unique_id is the controller MAC (12 lowercase hex digits) from its mDNS instance name (`mdns.py`: unicast PTR query for `_workstation._tcp.local.` to host:5353, or the zeroconf discovery name). A controller that does not answer is identified by its host; `async_setup_entry` retries the lookup at every setup and then moves the unique_id, the controller device identifier and the reboot button unique_id (`async_move_controller_id`). Reconfigure keeps a MAC id (aborts `wrong_device` if the new host announces another MAC); a host id moves to the new MAC or host.
 - Endpoints missing from device status/info (usually offline) are kept: the Controller link sensor shows off, the other entities are unavailable.
 - Endpoint entities subclass `WyreStormEndpointEntity` (entity.py); names come from `translation_key` in strings.json, icons from icons.json.
 

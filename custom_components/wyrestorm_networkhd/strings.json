@@ -63,6 +63,7 @@
     },
     "abort": {
       "already_configured": "Device is already configured",
+      "wrong_device": "The controller at the new host is a different controller (another MAC address). Add it as a new integration entry instead.",
       "reauth_successful": "Re-authentication was successful",
       "reconfigure_successful": "Re-configuration was successful"
     }

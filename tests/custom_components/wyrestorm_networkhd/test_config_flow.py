@@ -1,6 +1,6 @@
 """Tests for the config flow."""
 
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from homeassistant.config_entries import SOURCE_USER
@@ -20,7 +20,7 @@ from wyrestorm_networkhd.exceptions import (
 
 from custom_components.wyrestorm_networkhd.const import CONF_HOST_KEY_FINGERPRINT, DOMAIN
 
-from .conftest import ENTRY_DATA, FINGERPRINT, HOST, OTHER_FINGERPRINT, PINNED_DATA
+from .conftest import ENTRY_DATA, FINGERPRINT, HOST, MAC, OTHER_FINGERPRINT, PINNED_DATA
 
 NEW_HOST = "192.0.2.20"
 
@@ -281,3 +281,100 @@ async def test_reauth_host_key_mismatch(
     assert result["errors"] == {"base": "host_key_mismatch"}
     assert result["description_placeholders"]["fingerprint"] == OTHER_FINGERPRINT
     assert mock_client.ssh_cls.call_args.kwargs["host_key_fingerprints"] == [FINGERPRINT]
+
+
+async def test_user_flow_unique_id_is_mac(
+    hass: HomeAssistant, mock_client: MagicMock, mock_lookup_mac: AsyncMock
+) -> None:
+    """A controller that answers mDNS gets its MAC as the unique id."""
+    mock_lookup_mac.return_value = MAC
+    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER})
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], ENTRY_DATA)
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    await hass.async_block_till_done()
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["result"].unique_id == MAC
+    mock_lookup_mac.assert_awaited_with(HOST)
+
+
+@pytest.mark.parametrize(("existing_id", "lookup"), [(MAC, MAC), (MAC, None), (HOST, MAC)])
+async def test_user_flow_duplicate_by_mac_or_host(
+    hass: HomeAssistant, mock_client: MagicMock, mock_lookup_mac: AsyncMock, existing_id: str, lookup: str | None
+) -> None:
+    """The same controller aborts whether it is known by MAC or by host."""
+    MockConfigEntry(domain=DOMAIN, unique_id=existing_id, data=PINNED_DATA).add_to_hass(hass)
+    mock_lookup_mac.return_value = lookup
+    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER})
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], ENTRY_DATA)
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "already_configured"
+    mock_client.connect.assert_not_awaited()
+
+
+@pytest.fixture
+async def mac_entry(hass: HomeAssistant, mock_client: MagicMock, mock_lookup_mac: AsyncMock) -> MockConfigEntry:
+    """A loaded entry identified by the controller MAC."""
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=MAC, title=f"WyreStorm NetworkHD ({HOST})", data=PINNED_DATA)
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    return entry
+
+
+@pytest.mark.parametrize("lookup", [MAC, None])
+async def test_reconfigure_mac_entry_new_host(
+    hass: HomeAssistant, mac_entry: MockConfigEntry, mock_lookup_mac: AsyncMock, lookup: str | None
+) -> None:
+    """A MAC entry moves to a new host that is the same controller (or does not answer mDNS); ids stay."""
+    mock_lookup_mac.return_value = lookup
+    result = await mac_entry.start_reconfigure_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {**ENTRY_DATA, CONF_HOST: NEW_HOST, CONF_HOST_KEY_FINGERPRINT: FINGERPRINT}
+    )
+    await hass.async_block_till_done()
+    assert result["reason"] == "reconfigure_successful"
+    assert mac_entry.unique_id == MAC
+    assert mac_entry.data[CONF_HOST] == NEW_HOST
+    assert dr.async_get(hass).async_get_device_by_identifier((DOMAIN, MAC), mac_entry.entry_id)
+    mock_lookup_mac.assert_awaited_with(NEW_HOST)
+
+
+async def test_reconfigure_mac_entry_wrong_device(
+    hass: HomeAssistant, mac_entry: MockConfigEntry, mock_lookup_mac: AsyncMock
+) -> None:
+    """A new host that announces another MAC is another controller: abort."""
+    mock_lookup_mac.return_value = "e4ce02ddeeff"
+    result = await mac_entry.start_reconfigure_flow(hass)
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {**ENTRY_DATA, CONF_HOST: NEW_HOST})
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "wrong_device"
+    assert mac_entry.data[CONF_HOST] == HOST
+
+
+async def test_reconfigure_host_entry_learns_mac(
+    hass: HomeAssistant, setup_integration: MockConfigEntry, mock_lookup_mac: AsyncMock
+) -> None:
+    """An entry identified by host takes the MAC of the new host; the controller device and button move."""
+    entry = setup_integration
+    dev_reg, ent_reg = dr.async_get(hass), er.async_get(hass)
+    controller = dev_reg.async_get_device_by_identifier((DOMAIN, HOST), entry.entry_id)
+    reboot_id = ent_reg.async_get_entity_id(Platform.BUTTON, DOMAIN, f"{DOMAIN}_{HOST}_controller_reboot")
+    mock_lookup_mac.return_value = MAC
+    result = await entry.start_reconfigure_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {**ENTRY_DATA, CONF_HOST: NEW_HOST, CONF_HOST_KEY_FINGERPRINT: FINGERPRINT}
+    )
+    await hass.async_block_till_done()
+    assert result["reason"] == "reconfigure_successful"
+    assert entry.unique_id == MAC
+    assert dev_reg.async_get_device_by_identifier((DOMAIN, MAC), entry.entry_id).id == controller.id
+    assert ent_reg.async_get_entity_id(Platform.BUTTON, DOMAIN, f"{DOMAIN}_{MAC}_controller_reboot") == reboot_id
+
+
+async def test_reconfigure_onto_host_of_mac_entry(hass: HomeAssistant, setup_integration: MockConfigEntry) -> None:
+    """Reconfiguring onto the host of an entry identified by MAC aborts (no mDNS reply to compare)."""
+    MockConfigEntry(domain=DOMAIN, unique_id=MAC, data={**ENTRY_DATA, CONF_HOST: NEW_HOST}).add_to_hass(hass)
+    result = await setup_integration.start_reconfigure_flow(hass)
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {**ENTRY_DATA, CONF_HOST: NEW_HOST})
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "already_configured"

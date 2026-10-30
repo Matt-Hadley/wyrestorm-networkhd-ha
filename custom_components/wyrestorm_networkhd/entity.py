@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC, DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
@@ -25,6 +25,7 @@ class WyreStormEndpointEntity(CoordinatorEntity[WyreStormCoordinator]):
         self._attr_unique_id = f"{DOMAIN}_{device.true_name}_{key}"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, device.true_name)},
+            connections={(CONNECTION_NETWORK_MAC, device.mac)} if device.mac else set(),
             name=device.get_device_display_name(),
             manufacturer="WyreStorm",
             model=device.true_name,

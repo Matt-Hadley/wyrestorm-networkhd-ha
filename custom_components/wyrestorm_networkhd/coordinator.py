@@ -88,6 +88,11 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
         self._device_info: list[DeviceInfo] = []
         self._device_info_time = -float("inf")
 
+    @property
+    def controller_id(self) -> str:
+        """Identifier of the controller device: its MAC once known (the entry unique id), else the host."""
+        return self.config_entry.unique_id or self.host
+
     async def _async_setup(self) -> None:
         """Connect and subscribe to notifications (runs once before the first refresh)."""
         self.api = NHDAPI(self.client)

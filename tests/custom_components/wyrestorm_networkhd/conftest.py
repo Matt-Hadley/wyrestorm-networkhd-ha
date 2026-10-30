@@ -21,6 +21,7 @@ from wyrestorm_networkhd.models.api_query import DeviceInfo, DeviceJsonString, D
 from custom_components.wyrestorm_networkhd.const import CONF_HOST_KEY_FINGERPRINT, DOMAIN
 
 HOST = "192.0.2.10"
+MAC = "e4ce02aabbcc"  # made up; the controller announces it in its mDNS instance name
 ENTRY_DATA = {CONF_HOST: HOST, CONF_USERNAME: "wyrestorm", CONF_PASSWORD: "networkhd", CONF_PORT: 10022}
 # Made-up fingerprints (base64 of sha256 over arbitrary bytes), not from a real controller.
 FINGERPRINT = "SHA256:IH0oxHI46J7uM9kkm9vr64Ddm2qrmu0F3/JP54PLwMA"
@@ -60,6 +61,17 @@ class FakeNotificationHandler:
 @pytest.fixture(autouse=True)
 def auto_enable_custom_integrations(enable_custom_integrations: None) -> None:
     """Enable custom integrations in every test."""
+
+
+@pytest.fixture(autouse=True)
+def mock_lookup_mac() -> Generator[AsyncMock]:
+    """Patch the unicast mDNS MAC lookup (default: no reply); set return_value to answer."""
+    lookup = AsyncMock(return_value=None)
+    with (
+        patch("custom_components.wyrestorm_networkhd.async_lookup_mac", lookup),
+        patch("custom_components.wyrestorm_networkhd.config_flow.async_lookup_mac", lookup),
+    ):
+        yield lookup
 
 
 @pytest.fixture

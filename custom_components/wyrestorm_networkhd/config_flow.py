@@ -13,17 +13,14 @@ from homeassistant.config_entries import (
     ConfigFlow,
     ConfigFlowResult,
 )
-from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_PORT, CONF_USERNAME, Platform
+from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_PORT, CONF_USERNAME
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import (
-    device_registry as dr,
-    entity_registry as er,
-)
 from homeassistant.helpers.selector import TextSelector, TextSelectorConfig
 
 from wyrestorm_networkhd import NHDAPI, HostKeyMismatchError, normalize_fingerprints
 from wyrestorm_networkhd.exceptions import AuthenticationError
 
+from . import async_move_controller_id
 from .const import (
     CONF_HOST_KEY_FINGERPRINT,
     DEFAULT_PASSWORD,
@@ -32,6 +29,7 @@ from .const import (
     DOMAIN,
 )
 from .coordinator import API_ERRORS, create_client
+from .mdns import async_lookup_mac, is_mac
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -144,11 +142,11 @@ class WyreStormConfigFlow(ConfigFlow, domain=DOMAIN):
         if self.source != SOURCE_RECONFIGURE:
             return self.async_create_entry(title=f"WyreStorm NetworkHD ({host})", data=data)
         entry = self._get_reconfigure_entry()
-        if host != entry.data[CONF_HOST]:
-            self._move_controller_ids(entry.entry_id, entry.data[CONF_HOST], host)
+        if (new_id := self.unique_id or entry.unique_id) != entry.unique_id:
+            async_move_controller_id(self.hass, entry, new_id)
         # data (not data_updates) so a cleared fingerprint is removed.
         return self.async_update_reload_and_abort(
-            entry, unique_id=host, title=f"WyreStorm NetworkHD ({host})", data=data
+            entry, unique_id=new_id, title=f"WyreStorm NetworkHD ({host})", data=data
         )
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
@@ -157,13 +155,16 @@ class WyreStormConfigFlow(ConfigFlow, domain=DOMAIN):
             return self.async_show_form(
                 step_id="user", data_schema=get_config_schema(), description_placeholders=self._placeholders
             )
-        # shortcut: the controller exposes no MAC/serial over the API, so the host is the unique id.
-        await self.async_set_unique_id(user_input[CONF_HOST])
+        host = user_input[CONF_HOST]
+        # shortcut: the API exposes no MAC, so a controller that does not answer mDNS is identified by its host
+        # (async_setup_entry retries the lookup at every setup).
+        await self.async_set_unique_id(await async_lookup_mac(host) or host, raise_on_progress=False)
         self._abort_if_unique_id_configured()
+        self._async_abort_entries_match({CONF_HOST: host})
         return await self._async_connect_and_finish("user", user_input, {})
 
     async def async_step_reconfigure(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        """Change the connection details or host key; a new host also becomes the new unique id."""
+        """Change the connection details or host key; a new host must be the same controller if it answers mDNS."""
         entry = self._get_reconfigure_entry()
         if user_input is None:
             return self.async_show_form(
@@ -171,9 +172,16 @@ class WyreStormConfigFlow(ConfigFlow, domain=DOMAIN):
                 data_schema=get_config_schema(dict(entry.data)),
                 description_placeholders=self._placeholders,
             )
-        if user_input[CONF_HOST] != entry.data[CONF_HOST]:
-            await self.async_set_unique_id(user_input[CONF_HOST])
-            self._abort_if_unique_id_configured()
+        if (host := user_input[CONF_HOST]) != entry.data[CONF_HOST]:
+            mac = await async_lookup_mac(host)
+            if is_mac(entry.unique_id):
+                if mac:
+                    await self.async_set_unique_id(mac)
+                    self._abort_if_unique_id_mismatch(reason="wrong_device")
+            else:  # identified by host so far: the MAC, or else the new host, becomes the id
+                await self.async_set_unique_id(mac or host)
+                self._abort_if_unique_id_configured()
+            self._async_abort_entries_match({CONF_HOST: host})
         return await self._async_connect_and_finish("reconfigure", user_input, entry.data)
 
     async def async_step_reauth(self, entry_data: Mapping[str, Any]) -> ConfigFlowResult:
@@ -196,12 +204,3 @@ class WyreStormConfigFlow(ConfigFlow, domain=DOMAIN):
             description_placeholders={"host": entry.data[CONF_HOST], **self._placeholders},
             errors=errors,
         )
-
-    def _move_controller_ids(self, entry_id: str, old_host: str, new_host: str) -> None:
-        """Keep the controller device and its reboot button when the host (their id) changes."""
-        dev_reg = dr.async_get(self.hass)
-        if device := dev_reg.async_get_device_by_identifier((DOMAIN, old_host), entry_id):
-            dev_reg.async_update_device(device.id, new_identifiers={(DOMAIN, new_host)})
-        ent_reg = er.async_get(self.hass)
-        if entity_id := ent_reg.async_get_entity_id(Platform.BUTTON, DOMAIN, f"{DOMAIN}_{old_host}_controller_reboot"):
-            ent_reg.async_update_entity(entity_id, new_unique_id=f"{DOMAIN}_{new_host}_controller_reboot")

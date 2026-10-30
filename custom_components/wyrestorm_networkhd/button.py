@@ -62,8 +62,8 @@ class WyreStormControllerRebootButton(CoordinatorEntity[WyreStormCoordinator], B
     def __init__(self, coordinator: WyreStormCoordinator) -> None:
         """Initialize the controller reboot button."""
         super().__init__(coordinator)
-        self._attr_unique_id = f"{DOMAIN}_{coordinator.host}_controller_reboot"
-        self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, coordinator.host)})
+        self._attr_unique_id = f"{DOMAIN}_{coordinator.controller_id}_controller_reboot"
+        self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, coordinator.controller_id)})
 
     async def async_press(self) -> None:
         """Reboot the controller."""

@@ -2,7 +2,7 @@
 
 import asyncio
 from datetime import timedelta
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from freezegun.api import FrozenDateTimeFactory
@@ -29,7 +29,7 @@ from wyrestorm_networkhd.models.api_query import DeviceJsonString, Matrix
 from custom_components.wyrestorm_networkhd.const import CONF_HOST_KEY_FINGERPRINT, DOMAIN
 from custom_components.wyrestorm_networkhd.diagnostics import async_get_config_entry_diagnostics
 
-from .conftest import ENTRY_DATA, FINGERPRINT, HOST, OTHER_FINGERPRINT, RAW
+from .conftest import ENTRY_DATA, FINGERPRINT, HOST, MAC, OTHER_FINGERPRINT, PINNED_DATA, RAW
 
 LINK_RX1 = "binary_sensor.receiver_display1_controller_link"
 VIDEO_TX1 = "binary_sensor.transmitter_source1_video_input"
@@ -487,3 +487,44 @@ async def test_upgrade_pins_presented_key(
     assert mock_client.ssh_cls.call_count == 1
     assert hass.states.get(LINK_RX1).state == STATE_ON
     assert caplog.text.count("Pinned the SSH host key") == 1
+
+
+async def test_entry_adopts_mac(
+    hass: HomeAssistant, setup_integration: MockConfigEntry, mock_lookup_mac: AsyncMock
+) -> None:
+    """An entry identified by host takes the controller MAC at the next setup; device and entity ids are kept."""
+    entry = setup_integration
+    assert entry.unique_id == HOST  # no mDNS reply at the first setup: retried later
+    dev_reg, ent_reg = dr.async_get(hass), er.async_get(hass)
+    controller = dev_reg.async_get_device_by_identifier((DOMAIN, HOST), entry.entry_id)
+    entities = {e.entity_id: e.unique_id for e in er.async_entries_for_config_entry(ent_reg, entry.entry_id)}
+
+    mock_lookup_mac.return_value = MAC
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert entry.unique_id == MAC
+    mock_lookup_mac.assert_awaited_with(HOST)
+    device = dev_reg.async_get_device_by_identifier((DOMAIN, MAC), entry.entry_id)
+    assert device.id == controller.id
+    assert device.connections == {(dr.CONNECTION_NETWORK_MAC, "e4:ce:02:aa:bb:cc")}
+    after = {e.entity_id: e.unique_id for e in er.async_entries_for_config_entry(ent_reg, entry.entry_id)}
+    assert after == {**entities, REBOOT: f"{DOMAIN}_{MAC}_controller_reboot"}  # same entity ids
+    assert hass.states.get(REBOOT).state != STATE_UNAVAILABLE
+    assert MAC not in str(await async_get_config_entry_diagnostics(hass, entry))
+
+    mock_lookup_mac.reset_mock()
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    mock_lookup_mac.assert_not_awaited()  # identified: no more lookups
+
+
+async def test_entry_keeps_host_when_mac_taken(
+    hass: HomeAssistant, config_entry: MockConfigEntry, mock_client: MagicMock, mock_lookup_mac: AsyncMock
+) -> None:
+    """If another entry already has the MAC, the entry keeps its host id (and still loads)."""
+    MockConfigEntry(domain=DOMAIN, unique_id=MAC, data=PINNED_DATA).add_to_hass(hass)
+    mock_lookup_mac.return_value = MAC
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    assert config_entry.unique_id == HOST
+    assert config_entry.state is ConfigEntryState.LOADED
