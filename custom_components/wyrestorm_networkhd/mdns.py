@@ -11,9 +11,11 @@ import logging
 import re
 
 from zeroconf import DNSIncoming, DNSOutgoing, DNSPointer, DNSQuestion
-from zeroconf.const import _CLASS_IN, _FLAGS_QR_QUERY, _MDNS_PORT, _TYPE_PTR
 
 _LOGGER = logging.getLogger(__name__)
+
+# DNS values (RFC 1035/6762), not imported from zeroconf.const whose names are private.
+_CLASS_IN, _FLAGS_QR_QUERY, _MDNS_PORT, _TYPE_PTR = 1, 0, 5353, 12
 
 SERVICE_TYPE = "_workstation._tcp.local."
 LOOKUP_TIMEOUT = 1.5  # seconds; a controller on the LAN answers in milliseconds

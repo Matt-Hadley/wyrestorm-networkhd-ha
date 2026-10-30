@@ -6,11 +6,13 @@ from unittest.mock import patch
 
 import pytest
 from zeroconf import DNSIncoming, DNSOutgoing, DNSPointer
-from zeroconf.const import _CLASS_IN, _FLAGS_AA, _FLAGS_QR_RESPONSE, _TYPE_PTR
 
 from custom_components.wyrestorm_networkhd import mdns
 
 from .conftest import MAC
+
+# DNS values (RFC 1035/6762), not imported from zeroconf.const whose names are private.
+_CLASS_IN, _FLAGS_AA, _FLAGS_QR_RESPONSE, _TYPE_PTR = 1, 0x0400, 0x8000, 12
 
 INSTANCE = "NHD-000-CTL-E4CE02AABBCC [e4:ce:02:aa:bb:cc]._workstation._tcp.local."
 
