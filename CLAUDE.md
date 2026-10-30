@@ -6,31 +6,31 @@ This is a Home Assistant integration for WyreStorm NetworkHD matrix switching sy
 ## 🏗️ Architecture Guidelines
 
 ### Coordinator Pattern
-- The `WyreStormCoordinator` handles all API communication
-- Entities should NEVER call the API directly
-- Use `async_selective_refresh()` for targeted updates
+- `WyreStormCoordinator` (coordinator.py) owns the SSH client and makes every API call; it is stored on `entry.runtime_data` (`WyreStormConfigEntry`).
+- Entities NEVER call the API directly: use `async_set_matrix`, `async_set_power`, `async_reboot`.
+- `_async_setup` connects and registers the `endpoint`/`video` notification callbacks; `async_shutdown` unregisters them and disconnects.
+- Every API exchange holds `coordinator._lock` (the controller handles one command/response at a time).
+- Catch `API_ERRORS` (`NetworkHDError`, `OSError`, `ValueError`), never match exception message strings. Commands raise `HomeAssistantError(translation_key="command_failed")`.
 
-### API Optimization Rules
-1. **Video input changes**: Refresh matrix assignments and device status
-   ```python
-   await coordinator.async_selective_refresh(["matrix_assignments", "device_status"])
-   ```
+### Refresh Rules
+1. **Polling** is a fallback (`update_interval` option, default 60 s); `iot_class` is `local_push`.
+2. **Notifications** (endpoint online/offline, video found/lost) call `async_request_refresh()` via a background task; HA's debouncer collapses bursts.
+3. **Matrix changes** (`async_set_matrix`) re-read only `matrix get`.
+4. **Display power**: no refresh (it does not change device status).
+5. **Device info** is cached on the coordinator for 10 minutes (monotonic timestamp) and invalidated by endpoint notifications.
+6. **Link loss**: a failed update raises `UpdateFailed` (entities go unavailable; DataUpdateCoordinator logs once on loss and once on recovery) and disconnects; the next update reconnects.
 
-2. **Display power operations**: No refresh needed (doesn't affect device status)
-   
-3. **Device info**: Automatically cached for 10 minutes via decorator
+### Devices and Entities
+- The controller device is registered in `async_setup_entry` with identifier `(DOMAIN, host)`; endpoint devices use `(DOMAIN, true_name)` and `via_device_id=coordinator.controller_device_id`.
+- The controller API exposes no MAC/serial, so the config entry unique_id is the host. Reconfigure with a new host moves the unique_id, the controller device identifier and the reboot button unique_id.
+- Endpoints missing from device status/info (usually offline) are kept: the Controller link sensor shows off, the other entities are unavailable.
+- Endpoint entities subclass `WyreStormEndpointEntity` (entity.py); names come from `translation_key` in strings.json, icons from icons.json.
 
-4. **Real-time notifications**: Automatic selective refresh on events
-   - Device online/offline → refreshes device_jsonstring
-   - Video found/lost → refreshes matrix_assignments
+### Services
+`matrix_set` (`source_device` optional = disconnect, `target_device`) and `power_control` (`devices`, `power_state`) are registered once in `async_setup` (services.py). Devices are matched by alias or true name; the controller is the one loaded entry that has all of them, or `config_entry_id` when ambiguous. Bad input raises `ServiceValidationError`.
 
-### Caching Strategy
-Use the `@cache_for_seconds` decorator for rarely-changing data:
-```python
-@cache_for_seconds(600)  # 10 minutes
-async def get_expensive_data(self):
-    return await self.api.expensive_call()
-```
+### Translations
+`translations/en.json` must stay identical to `strings.json` (custom integrations do not get strings.json compiled): `cp strings.json translations/en.json`. Do not use `[%key:...%]` references.
 
 ## 🧪 Testing Commands
 ```bash
@@ -41,7 +41,10 @@ make test-cov
 .venv/bin/pytest tests/ --tb=no --no-cov -q
 
 # Run specific test file
-.venv/bin/pytest tests/custom_components/wyrestorm_networkhd/test_coordinator.py -v
+.venv/bin/pytest tests/custom_components/wyrestorm_networkhd/test_init.py -v
+
+# Regenerate entity snapshots after an intended entity change
+.venv/bin/pytest tests/custom_components/wyrestorm_networkhd/test_init.py --snapshot-update
 
 # Run with specific pattern
 .venv/bin/pytest -k "test_matrix" -v
@@ -50,21 +53,23 @@ make test-cov
 ## 📁 File Structure
 ```
 custom_components/wyrestorm_networkhd/
-├── __init__.py              # Integration setup and services
-├── coordinator.py           # Main data coordinator with selective refresh
-├── config_flow.py           # Configuration UI flow
-├── const.py                # Constants (well-documented)
-├── services.yaml           # Service definitions for HA UI
-├── _cache_utils.py         # Caching decorator utility
-├── _utils_coordinator.py   # Coordinator helper functions
-├── models/                 # Data models (no business logic)
-│   ├── coordinator.py      # CoordinatorData class
-│   ├── device_controller.py # Controller device model
-│   └── device_receiver_transmitter.py # Device models
-├── binary_sensor.py        # Online/video activity sensors
-├── button.py              # Display power control buttons
-└── select.py              # Input source selection
+├── __init__.py              # Setup/unload, controller device, service registration
+├── coordinator.py           # Connection, polling, notifications, commands
+├── services.py              # matrix_set / power_control
+├── entity.py                # Base entity for endpoint devices
+├── config_flow.py           # User, reconfigure and options flows
+├── diagnostics.py           # Redacted diagnostics
+├── const.py                 # Constants
+├── services.yaml, strings.json, translations/en.json, icons.json
+├── brand/icon.png           # Local brand image (HA >= 2026.3)
+├── _utils_coordinator.py    # Builds device collections / matrix mapping
+├── models/                  # Data models (no business logic)
+├── binary_sensor.py         # Controller link / video sensors
+├── button.py                # Display power and controller reboot buttons
+└── select.py                # Input source selection
 ```
+
+HA-level tests (tests/custom_components/wyrestorm_networkhd/test_*.py) mock `NetworkHDClientSSH`/`NHDAPI` and feed library models parsed from `fixtures/controller_responses.json` (anonymised controller replies: documentation IPs, made-up MACs, generic aliases only).
 
 ## 📝 Code Style
 - Use type hints for all function signatures
@@ -78,8 +83,8 @@ custom_components/wyrestorm_networkhd/
 1. **Don't refresh after display power changes** - The display state doesn't affect device status
 2. **Don't call API from entities** - Always go through the coordinator
 3. **Don't forget to test with disconnected devices** - Handle offline devices gracefully
-4. **Don't modify models after creation** - Models are data containers only
-5. **Don't bypass selective refresh** - Use coordinator methods for all operations
+4. **Don't modify models after creation** - Models are data containers only (use `dataclasses.replace`)
+5. **Don't send commands without `coordinator._lock`** - Interleaved commands corrupt responses
 
 ## 🔧 Development Workflow
 1. Make changes to relevant files
@@ -89,50 +94,32 @@ custom_components/wyrestorm_networkhd/
 5. Update docstrings if you add public methods
 6. Test with actual hardware if possible
 
-## 📊 Performance Guidelines
-- **Input switching**: ~500ms (matrix + status refresh)
-- **Matrix assignment refresh**: ~200ms
-- **Device status refresh**: ~300ms  
-- **Cached device info**: <1ms
-- **Real-time notifications**: <50ms
-- **Target UI response**: <100ms after user action
-
-### API Call Optimization
-- Video input changes: Matrix + status refresh only
-- Display power: No refresh needed
-- Device info: Cached for 10 minutes
+## 📊 Performance Notes
+- With library 2.2.x every command takes at least ~1 s (idle-gap response framing), and a full refresh sends six commands, so a full refresh takes several seconds. Keep targeted paths (matrix-only refresh, no refresh after display power) targeted.
 
 ## 🐛 Debugging Tips
-- Enable debug logging: Set logger `custom_components.wyrestorm_networkhd` to `debug`
-- Check SSH connection: Look for "Device connection successful" in logs
-- Monitor API calls: Watch for "Fetching" messages in debug logs
-- Use selective refresh logs to verify optimization: "Starting selective data refresh for: ['matrix_assignments']"
+- Enable debug logging: Set logger `custom_components.wyrestorm_networkhd` (and `wyrestorm_networkhd`) to `debug`
+- Loss/recovery of the controller is logged once each by DataUpdateCoordinator ("Error fetching WyreStorm NetworkHD data" / "... recovered")
+- Notifications are logged at debug as "Notification received"
 
 ## 🧩 Adding New Features
 
 ### New Entity Type
-1. Create new platform file (e.g., `sensor.py`)
+1. Create new platform file (e.g., `sensor.py`) with `PARALLEL_UPDATES`
 2. Add platform to `PLATFORMS` in `const.py`
-3. Follow existing entity patterns (inherit from `CoordinatorEntity`)
-4. Add comprehensive tests in `tests/` directory
-
-### New API Optimization
-1. Add new option to `async_selective_refresh()`
-2. Document performance impact in docstring
-3. Add caching decorator if data changes rarely
-4. Update CLAUDE.md with new optimization
+3. Subclass `WyreStormEndpointEntity`; add the name to `strings.json` (+ copy to `translations/en.json`) and icon to `icons.json`
+4. Add HA-level tests and update snapshots
 
 ### New Service
-1. Add service definition to `services.yaml`
-2. Implement service handler in `__init__.py`
-3. Add service constants to `const.py`
-4. Follow validation patterns from existing services
+1. Add service definition to `services.yaml` and names/descriptions to `strings.json`
+2. Implement the handler in `services.py` (resolve devices with `_resolve`) and the command in the coordinator
+3. Raise `ServiceValidationError` for bad input, `HomeAssistantError` (translation_key) for controller failures
 
 ## 🔍 Code Review Checklist
 - [ ] All public methods have comprehensive docstrings
 - [ ] Type hints are complete and accurate
 - [ ] No direct API calls from entities (use coordinator)
-- [ ] Appropriate use of selective refresh or caching
+- [ ] API calls hold the coordinator lock and catch `API_ERRORS`
 - [ ] Tests cover new functionality
 - [ ] Error handling for offline devices
 - [ ] Logging at appropriate levels
