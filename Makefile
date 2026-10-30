@@ -140,7 +140,7 @@ create-venv: ## Create/ensure virtual environment
 
 install-deps: create-venv ## Install development dependencies
 	$(ECHO) "$(YELLOW)🔧 Installing development dependencies...$(NC)"
-	$(Q)$(PIP) install --upgrade pip
+	$(Q)$(PIP) install --upgrade pip setuptools
 	$(Q)$(PIP) install -e ".[dev]"
 	@echo "$(GREEN)✓$(NC) Development dependencies installed"
 
