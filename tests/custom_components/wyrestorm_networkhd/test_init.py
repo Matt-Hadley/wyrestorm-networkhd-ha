@@ -54,11 +54,17 @@ async def test_setup_and_unload(
     mock_client.disconnect.assert_awaited()
 
 
-@pytest.mark.parametrize("fail", ["connect", "query"])
+@pytest.mark.parametrize(
+    ("fail", "reason"),
+    [
+        ("connect", f"Cannot connect to the NetworkHD controller at {HOST}: refused"),
+        ("query", f"Error communicating with the NetworkHD controller at {HOST}: No 'devices status' key"),
+    ],
+)
 async def test_setup_not_ready(
-    hass: HomeAssistant, config_entry: MockConfigEntry, mock_client: MagicMock, fail: str
+    hass: HomeAssistant, config_entry: MockConfigEntry, mock_client: MagicMock, fail: str, reason: str
 ) -> None:
-    """An unreachable or misbehaving controller retries setup later."""
+    """An unreachable or misbehaving controller retries setup later, with a translated reason."""
     if fail == "connect":
         mock_client.connect.side_effect = NHDConnectionError("refused")
     else:
@@ -66,6 +72,7 @@ async def test_setup_not_ready(
     await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     assert config_entry.state is ConfigEntryState.SETUP_RETRY
+    assert config_entry.reason == reason
 
 
 RX = "wyrestorm_networkhd_NHD-400-RX-E4CE02BB000"

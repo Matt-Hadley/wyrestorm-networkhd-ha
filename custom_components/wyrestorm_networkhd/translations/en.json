@@ -105,6 +105,18 @@
     "host_key_mismatch": {
       "message": "The controller at {host} presented SSH host key {fingerprint}, which does not match the pinned fingerprint"
     },
+    "invalid_auth": {
+      "message": "The NetworkHD controller at {host} rejected the credentials"
+    },
+    "cannot_connect": {
+      "message": "Cannot connect to the NetworkHD controller at {host}: {error}"
+    },
+    "update_failed": {
+      "message": "Error communicating with the NetworkHD controller at {host}: {error}"
+    },
+    "rebooting": {
+      "message": "The NetworkHD controller at {host} is rebooting"
+    },
     "command_failed": {
       "message": "Command to the NetworkHD controller at {host} failed: {error}"
     },

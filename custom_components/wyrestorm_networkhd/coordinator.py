@@ -100,9 +100,9 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
         except HostKeyMismatchError as err:
             raise self._host_key_mismatch(ConfigEntryError, err) from err  # no retries until reconfigured
         except AuthenticationError as err:
-            raise ConfigEntryAuthFailed(f"Controller at {self.host} rejected the credentials") from err
+            raise self._error(ConfigEntryAuthFailed, "invalid_auth") from err
         except API_ERRORS as err:
-            raise UpdateFailed(f"Cannot connect to controller at {self.host}: {err}") from err
+            raise self._error(UpdateFailed, "cannot_connect", error=str(err)) from err
         for notification_type in NOTIFICATION_TYPES:
             self.client.notification_handler.register_callback(notification_type, self._on_notification)
 
@@ -131,12 +131,16 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
             _LOGGER.debug("Not connected to %s, reconnecting", self.host)
             await self._connect()
 
-    def _host_key_mismatch(self, cls: type[HomeAssistantError], err: HostKeyMismatchError) -> HomeAssistantError:
+    def _error[E: HomeAssistantError](self, cls: type[E], key: str, **placeholders: str) -> E:
+        """Build a translated exception about this controller."""
         return cls(
             translation_domain=DOMAIN,
-            translation_key="host_key_mismatch",
-            translation_placeholders={"host": self.host, "fingerprint": err.presented_fingerprint},
+            translation_key=key,
+            translation_placeholders={"host": self.host, **placeholders},
         )
+
+    def _host_key_mismatch[E: HomeAssistantError](self, cls: type[E], err: HostKeyMismatchError) -> E:
+        return self._error(cls, "host_key_mismatch", fingerprint=err.presented_fingerprint)
 
     async def _connect(self) -> None:
         """Connect; pin the host key if none is stored; a key mismatch raises a repair issue (and re-raises)."""
@@ -175,12 +179,12 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 # Keep polling (the key is rejected before login) so a returning pinned key recovers on its own.
                 raise self._host_key_mismatch(UpdateFailed, err) from err
             except AuthenticationError as err:
-                raise ConfigEntryAuthFailed(f"Controller at {self.host} rejected the credentials") from err
+                raise self._error(ConfigEntryAuthFailed, "invalid_auth") from err
             except API_ERRORS as err:
                 # Drop the link so the next update starts from a clean connection.
                 with suppress(*API_ERRORS):
                     await self.client.disconnect()
-                raise UpdateFailed(f"Error communicating with controller at {self.host}: {err}") from err
+                raise self._error(UpdateFailed, "update_failed", error=str(err)) from err
 
     async def _fetch(self) -> CoordinatorData:
         query = self.api.api_query
@@ -204,11 +208,7 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
         )
 
     def _command_failed(self, err: Exception) -> HomeAssistantError:
-        return HomeAssistantError(
-            translation_domain=DOMAIN,
-            translation_key="command_failed",
-            translation_placeholders={"host": self.host, "error": str(err)},
-        )
+        return self._error(HomeAssistantError, "command_failed", error=str(err))
 
     # Lookups (by alias or true name)
     def find_receiver(self, name: str) -> DeviceReceiver | None:
@@ -267,4 +267,4 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 raise self._command_failed(err) from err
             with suppress(*API_ERRORS):
                 await self.client.disconnect()
-        self.async_set_update_error(UpdateFailed(f"Controller at {self.host} is rebooting"))
+        self.async_set_update_error(self._error(UpdateFailed, "rebooting"))
