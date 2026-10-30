@@ -3,14 +3,20 @@
 from __future__ import annotations
 
 import logging
+from contextlib import suppress
 from typing import Any
 
 import voluptuous as vol
-from homeassistant import config_entries
-from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_PORT, CONF_USERNAME
-from homeassistant.data_entry_flow import FlowResult
+from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlowWithReload
+from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_PORT, CONF_USERNAME, Platform
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import (
+    device_registry as dr,
+    entity_registry as er,
+)
 
-from wyrestorm_networkhd import NHDAPI, NetworkHDClientSSH
+from wyrestorm_networkhd import NHDAPI
+from wyrestorm_networkhd.exceptions import AuthenticationError
 
 from .const import (
     CONF_UPDATE_INTERVAL,
@@ -19,14 +25,14 @@ from .const import (
     DEFAULT_UPDATE_INTERVAL,
     DEFAULT_USERNAME,
     DOMAIN,
-    SSH_HOST_KEY_POLICY,
 )
+from .coordinator import API_ERRORS, create_client
 
 _LOGGER = logging.getLogger(__name__)
 
 
 def get_config_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
-    """Get the configuration schema with optional defaults."""
+    """Get the connection schema with optional defaults."""
     defaults = defaults or {}
     return vol.Schema(
         {
@@ -34,119 +40,105 @@ def get_config_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
             vol.Required(CONF_USERNAME, default=defaults.get(CONF_USERNAME, DEFAULT_USERNAME)): str,
             vol.Required(CONF_PASSWORD, default=defaults.get(CONF_PASSWORD, DEFAULT_PASSWORD)): str,
             vol.Optional(CONF_PORT, default=defaults.get(CONF_PORT, DEFAULT_PORT)): int,
-            vol.Optional(
-                CONF_UPDATE_INTERVAL, default=defaults.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
-            ): vol.All(int, vol.Range(min=10, max=300)),
         }
     )
 
 
-async def test_connection(user_input: dict[str, Any]) -> dict[str, str]:
-    """Test connection to the controller and return any errors."""
-    errors = {}
-    client = None
-
+async def validate_connection(hass: HomeAssistant, data: dict[str, Any]) -> None:
+    """Connect and query the controller version; raises the library's errors on failure."""
+    client = create_client(data)
     try:
-        client = NetworkHDClientSSH(
-            host=user_input[CONF_HOST],
-            port=user_input.get(CONF_PORT, DEFAULT_PORT),
-            username=user_input[CONF_USERNAME],
-            password=user_input[CONF_PASSWORD],
-            ssh_host_key_policy=SSH_HOST_KEY_POLICY,
-        )
-
         await client.connect()
-        api = NHDAPI(client)
+        api = await hass.async_add_executor_job(NHDAPI, client)
         await api.api_query.config_get_version()
-
-    except Exception as err:
-        _LOGGER.error("Connection test failed: %s", err)
-        errors["base"] = str(err)
     finally:
-        if client and client.is_connected():
-            try:
-                await client.disconnect()
-            except Exception as disconnect_err:
-                _LOGGER.debug("Error disconnecting client: %s", disconnect_err)
-
-    return errors
+        with suppress(*API_ERRORS):
+            await client.disconnect()
 
 
-class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+class WyreStormConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for WyreStorm NetworkHD."""
 
     VERSION = 1
 
     @staticmethod
-    def async_get_options_flow(config_entry: config_entries.ConfigEntry) -> OptionsFlow:
+    @callback
+    def async_get_options_flow(config_entry: ConfigEntry) -> WyreStormOptionsFlow:
         """Create the options flow."""
-        return OptionsFlow(config_entry)
+        return WyreStormOptionsFlow()
 
-    async def async_step_user(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+    async def _async_try_connect(self, data: dict[str, Any]) -> dict[str, str]:
+        """Return form errors for `data` (empty if the controller answered)."""
+        try:
+            await validate_connection(self.hass, data)
+        except AuthenticationError:
+            return {"base": "invalid_auth"}
+        except API_ERRORS as err:
+            _LOGGER.debug("Cannot connect to %s: %s", data[CONF_HOST], err)
+            return {"base": "cannot_connect"}
+        except Exception:
+            _LOGGER.exception("Unexpected error connecting to %s", data[CONF_HOST])
+            return {"base": "unknown"}
+        return {}
+
+    async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Handle the initial step."""
+        errors: dict[str, str] = {}
         if user_input is not None:
+            # shortcut: the controller exposes no MAC/serial over the API, so the host is the unique id.
             await self.async_set_unique_id(user_input[CONF_HOST])
             self._abort_if_unique_id_configured()
+            if not (errors := await self._async_try_connect(user_input)):
+                return self.async_create_entry(title=f"WyreStorm NetworkHD ({user_input[CONF_HOST]})", data=user_input)
 
-            errors = await test_connection(user_input)
-            if not errors:
-                return self.async_create_entry(
-                    title=f"WyreStorm NetworkHD ({user_input[CONF_HOST]})",
-                    data=user_input,
-                )
-        else:
-            errors = {}
+        return self.async_show_form(step_id="user", data_schema=get_config_schema(user_input), errors=errors)
 
-        return self.async_show_form(
-            step_id="user",
-            data_schema=get_config_schema(),
-            errors=errors,
-        )
-
-    async def async_step_reconfigure(self, user_input: dict[str, Any] | None = None) -> FlowResult:
-        """Handle reconfiguration of the integration."""
-        entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
-
+    async def async_step_reconfigure(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Change the connection details; a new host also becomes the new unique id."""
+        entry = self._get_reconfigure_entry()
+        errors: dict[str, str] = {}
         if user_input is not None:
-            errors = await test_connection(user_input)
-            if not errors:
-                self.hass.config_entries.async_update_entry(
+            old_host, new_host = entry.data[CONF_HOST], user_input[CONF_HOST]
+            if new_host != old_host:
+                await self.async_set_unique_id(new_host)
+                self._abort_if_unique_id_configured()
+            if not (errors := await self._async_try_connect(user_input)):
+                if new_host != old_host:
+                    self._move_controller_ids(entry.entry_id, old_host, new_host)
+                return self.async_update_reload_and_abort(
                     entry,
-                    data=user_input,
-                    title=f"WyreStorm NetworkHD ({user_input[CONF_HOST]})",
+                    unique_id=new_host,
+                    title=f"WyreStorm NetworkHD ({new_host})",
+                    data_updates=user_input,
                 )
-                await self.hass.config_entries.async_reload(entry.entry_id)
-                return self.async_abort(reason="reconfigure_successful")
-        else:
-            errors = {}
 
         return self.async_show_form(
-            step_id="reconfigure",
-            data_schema=get_config_schema(entry.data),
-            errors=errors,
+            step_id="reconfigure", data_schema=get_config_schema(user_input or dict(entry.data)), errors=errors
         )
 
+    def _move_controller_ids(self, entry_id: str, old_host: str, new_host: str) -> None:
+        """Keep the controller device and its reboot button when the host (their id) changes."""
+        dev_reg = dr.async_get(self.hass)
+        if device := dev_reg.async_get_device_by_identifier((DOMAIN, old_host), entry_id):
+            dev_reg.async_update_device(device.id, new_identifiers={(DOMAIN, new_host)})
+        ent_reg = er.async_get(self.hass)
+        if entity_id := ent_reg.async_get_entity_id(Platform.BUTTON, DOMAIN, f"{DOMAIN}_{old_host}_controller_reboot"):
+            ent_reg.async_update_entity(entity_id, new_unique_id=f"{DOMAIN}_{new_host}_controller_reboot")
 
-class OptionsFlow(config_entries.OptionsFlow):
-    """Handle options flow for WyreStorm NetworkHD integration."""
 
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        """Initialize options flow."""
-        self.config_entry = config_entry
+class WyreStormOptionsFlow(OptionsFlowWithReload):
+    """Edit the polling interval."""
 
-    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Manage the options."""
         if user_input is not None:
-            new_data = {**self.config_entry.data, **user_input}
-            self.hass.config_entries.async_update_entry(
-                self.config_entry,
-                data=new_data,
-                title=f"WyreStorm NetworkHD ({new_data[CONF_HOST]})",
-            )
-            await self.hass.config_entries.async_reload(self.config_entry.entry_id)
-            return self.async_create_entry(title="", data={})
+            return self.async_create_entry(data=user_input)
 
+        entry = self.config_entry
+        current = entry.options.get(CONF_UPDATE_INTERVAL, entry.data.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL))
         return self.async_show_form(
             step_id="init",
-            data_schema=get_config_schema(self.config_entry.data),
+            data_schema=vol.Schema(
+                {vol.Required(CONF_UPDATE_INTERVAL, default=current): vol.All(int, vol.Range(min=10, max=300))}
+            ),
         )

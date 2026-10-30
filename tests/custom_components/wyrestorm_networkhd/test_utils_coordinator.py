@@ -10,6 +10,8 @@ Test Categories:
     - Error Handling and Edge Cases
 """
 
+from wyrestorm_networkhd.models.api_query import DeviceInfo, DeviceStatus
+
 from custom_components.wyrestorm_networkhd._utils_coordinator import (
     build_device_collections,
     process_matrix_assignments,
@@ -149,45 +151,45 @@ class TestBuildDeviceCollections:
     # Data Matching and Error Handling Tests
     # =============================================================================
 
-    def test_mismatched_lists_skip_incomplete_devices(self, device_json_incomplete_fixture):
-        """Verify devices without complete data are skipped.
+    def test_devices_without_status_or_info_are_kept(self, device_json_incomplete_fixture):
+        """Devices the controller reports no status/info for (offline) are kept, without that data."""
+        transmitters, receivers = build_device_collections([device_json_incomplete_fixture], [], [])
 
-        Tests that devices missing status or info data are not included
-        in the output collections, preventing incomplete device objects.
-        """
-        # Only provide JSON, not status or info
-        device_json_list = [device_json_incomplete_fixture]
-        device_status_list = []  # Missing status data
-        device_info_list = []  # Missing info data
-
-        transmitters, receivers = build_device_collections(device_json_list, device_status_list, device_info_list)
-
-        # Device should be skipped due to missing data
         assert transmitters == {}
-        assert receivers == {}
+        receiver = receivers["INCOMPLETE-RX-01"]
+        assert receiver.alias_name == "Incomplete Device"
+        assert receiver.mac is None
+        assert receiver.hdmi_out_frame_rate is None
 
-    def test_partial_data_matching_creates_complete_devices_only(
+    def test_union_of_sources(
         self,
         device_json_complete_fixture,
         device_status_complete_fixture,
         device_info_complete_fixture,
         device_json_orphan_fixture,
     ):
-        """Verify only devices with complete data are created.
-
-        Tests a scenario with multiple devices where only some have
-        complete data across all three input sources.
-        """
+        """Every device in any source is created; missing data stays None."""
         transmitters, receivers = build_device_collections(
             [device_json_complete_fixture, device_json_orphan_fixture],
-            [device_status_complete_fixture],  # Only status for first device
-            [device_info_complete_fixture],  # Only info for first device
+            [device_status_complete_fixture],
+            [device_info_complete_fixture],
         )
 
-        # Only the complete device should be created
-        assert len(receivers) == 1
-        assert len(transmitters) == 0  # Orphan device skipped
-        assert "COMPLETE-RX-01" in receivers
+        assert receivers["COMPLETE-RX-01"].mac == "00:00:00:00:00:00"
+        assert transmitters["ORPHAN-TX-01"].mac is None
+
+    def test_status_only_device_type_inferred_from_name(self):
+        """A device only in status/info gets its type from its true name; unknown types are skipped."""
+        transmitters, receivers = build_device_collections(
+            [],
+            [DeviceStatus(aliasname="Src", name="NHD-400-TX-AA"), DeviceStatus(aliasname="X", name="NHD-600-TRX-AA")],
+            [DeviceInfo(aliasname="Disp", name="NHD-400-RX-BB", ip4addr="192.0.2.5")],
+        )
+
+        assert transmitters["NHD-400-TX-AA"].alias_name == "Src"
+        assert transmitters["NHD-400-TX-AA"].online is True
+        assert receivers["NHD-400-RX-BB"].ip == "192.0.2.5"
+        assert len(transmitters) + len(receivers) == 2
 
     def test_invalid_device_type_is_skipped(
         self, device_json_invalid_type_fixture, device_status_invalid_fixture, device_info_invalid_fixture

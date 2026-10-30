@@ -21,13 +21,13 @@ class DeviceBase:
     online: bool
     sequence: int
 
-    # Network info (from DeviceInfo)
-    mac: str
-    gateway: str
-    netmask: str
-    version: str
-    edid: str
-    ip_mode: str
+    # Network info (from DeviceInfo; None when the controller has no info for the device, e.g. offline)
+    mac: str | None = None
+    gateway: str | None = None
+    netmask: str | None = None
+    version: str | None = None
+    edid: str | None = None
+    ip_mode: str | None = None
 
     # Common status fields (from DeviceStatus)
     line_out_audio_enable: bool | None = None
@@ -118,14 +118,14 @@ class DeviceTransmitter(DeviceBase):
 
 
 def create_device_from_wyrestorm_models(
-    device_json: DeviceJsonString, device_status: DeviceStatus, device_info: DeviceInfo
+    device_json: DeviceJsonString, device_status: DeviceStatus | None = None, device_info: DeviceInfo | None = None
 ) -> DeviceReceiver | DeviceTransmitter:
     """Factory function to create appropriate device type from wyrestorm-networkhd models.
 
     Args:
         device_json: DeviceJsonString model from wyrestorm-networkhd package
-        device_status: DeviceStatus model from wyrestorm-networkhd package
-        device_info: DeviceInfo model from wyrestorm-networkhd package
+        device_status: DeviceStatus model, or None if the controller reported no status (offline device)
+        device_info: DeviceInfo model, or None if the controller reported no info (offline device)
 
     Returns:
         DeviceReceiver or DeviceTransmitter instance based on device type
@@ -140,16 +140,16 @@ def create_device_from_wyrestorm_models(
         "online": device_json.online,
         "sequence": device_json.sequence,
         # From DeviceInfo
-        "mac": device_info.mac,
-        "gateway": device_info.gateway,
-        "netmask": device_info.netmask,
-        "version": device_info.version,
-        "edid": device_info.edid,
-        "ip_mode": device_info.ip_mode,
+        "mac": getattr(device_info, "mac", None),
+        "gateway": getattr(device_info, "gateway", None),
+        "netmask": getattr(device_info, "netmask", None),
+        "version": getattr(device_info, "version", None),
+        "edid": getattr(device_info, "edid", None),
+        "ip_mode": getattr(device_info, "ip_mode", None),
         # From DeviceStatus (optional common fields)
-        "line_out_audio_enable": device_status.line_out_audio_enable,
-        "stream_frame_rate": device_status.stream_frame_rate,
-        "stream_resolution": device_status.stream_resolution,
+        "line_out_audio_enable": getattr(device_status, "line_out_audio_enable", None),
+        "stream_frame_rate": getattr(device_status, "stream_frame_rate", None),
+        "stream_resolution": getattr(device_status, "stream_resolution", None),
     }
 
     # Create appropriate subclass based on device type (case insensitive)
@@ -160,21 +160,21 @@ def create_device_from_wyrestorm_models(
             # RX specific fields from DeviceJsonString
             tx_name=device_json.txName,
             # RX specific fields from DeviceStatus
-            audio_bitrate=device_status.audio_bitrate,
-            audio_input_format=device_status.audio_input_format,
-            hdcp_status=device_status.hdcp_status,
-            hdmi_out_active=device_status.hdmi_out_active,
-            hdmi_out_audio_enable=device_status.hdmi_out_audio_enable,
-            hdmi_out_frame_rate=device_status.hdmi_out_frame_rate,
-            hdmi_out_resolution=device_status.hdmi_out_resolution,
-            stream_error_count=device_status.stream_error_count,
+            audio_bitrate=getattr(device_status, "audio_bitrate", None),
+            audio_input_format=getattr(device_status, "audio_input_format", None),
+            hdcp_status=getattr(device_status, "hdcp_status", None),
+            hdmi_out_active=getattr(device_status, "hdmi_out_active", None),
+            hdmi_out_audio_enable=getattr(device_status, "hdmi_out_audio_enable", None),
+            hdmi_out_frame_rate=getattr(device_status, "hdmi_out_frame_rate", None),
+            hdmi_out_resolution=getattr(device_status, "hdmi_out_resolution", None),
+            stream_error_count=getattr(device_status, "stream_error_count", None),
             # RX specific fields from DeviceInfo
-            sourcein=device_info.sourcein,
-            analog_audio_source=device_info.analog_audio_source,
-            hdmi_audio_source=device_info.hdmi_audio_source,
-            video_mode=device_info.video_mode,
-            video_stretch_type=device_info.video_stretch_type,
-            video_timing=device_info.video_timing,
+            sourcein=getattr(device_info, "sourcein", None),
+            analog_audio_source=getattr(device_info, "analog_audio_source", None),
+            hdmi_audio_source=getattr(device_info, "hdmi_audio_source", None),
+            video_mode=getattr(device_info, "video_mode", None),
+            video_stretch_type=getattr(device_info, "video_stretch_type", None),
+            video_timing=getattr(device_info, "video_timing", None),
         )
 
     elif device_type_lower == "transmitter":
@@ -183,25 +183,25 @@ def create_device_from_wyrestorm_models(
             # TX specific fields from DeviceJsonString
             nameoverlay=device_json.nameoverlay,
             # TX specific fields from DeviceStatus
-            audio_stream_ip_address=device_status.audio_stream_ip_address,
-            encoding_enable=device_status.encoding_enable,
-            hdmi_in_active=device_status.hdmi_in_active,
-            hdmi_in_frame_rate=device_status.hdmi_in_frame_rate,
-            resolution=device_status.resolution,
-            video_stream_ip_address=device_status.video_stream_ip_address,
+            audio_stream_ip_address=getattr(device_status, "audio_stream_ip_address", None),
+            encoding_enable=getattr(device_status, "encoding_enable", None),
+            hdmi_in_active=getattr(device_status, "hdmi_in_active", None),
+            hdmi_in_frame_rate=getattr(device_status, "hdmi_in_frame_rate", None),
+            resolution=getattr(device_status, "resolution", None),
+            video_stream_ip_address=getattr(device_status, "video_stream_ip_address", None),
             # TX specific fields from DeviceInfo
-            audio_input_type=device_info.audio_input_type,
-            analog_audio_direction=device_info.analog_audio_direction,
-            bandwidth_adjust_mode=device_info.bandwidth_adjust_mode,
-            bit_perpixel=device_info.bit_perpixel,
-            color_space=device_info.color_space,
-            stream0_enable=device_info.stream0_enable,
-            stream0fps_by2_enable=device_info.stream0fps_by2_enable,
-            stream1_enable=device_info.stream1_enable,
-            stream1_scale=device_info.stream1_scale,
-            stream1fps_by2_enable=device_info.stream1fps_by2_enable,
-            video_input=device_info.video_input,
-            video_source=device_info.video_source,
+            audio_input_type=getattr(device_info, "audio_input_type", None),
+            analog_audio_direction=getattr(device_info, "analog_audio_direction", None),
+            bandwidth_adjust_mode=getattr(device_info, "bandwidth_adjust_mode", None),
+            bit_perpixel=getattr(device_info, "bit_perpixel", None),
+            color_space=getattr(device_info, "color_space", None),
+            stream0_enable=getattr(device_info, "stream0_enable", None),
+            stream0fps_by2_enable=getattr(device_info, "stream0fps_by2_enable", None),
+            stream1_enable=getattr(device_info, "stream1_enable", None),
+            stream1_scale=getattr(device_info, "stream1_scale", None),
+            stream1fps_by2_enable=getattr(device_info, "stream1fps_by2_enable", None),
+            video_input=getattr(device_info, "video_input", None),
+            video_source=getattr(device_info, "video_source", None),
         )
 
     else:
