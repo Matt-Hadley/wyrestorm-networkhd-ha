@@ -2,5 +2,6 @@
   "name": "WyreStorm NetworkHD",
   "content_in_root": false,
   "zip_release": true,
-  "filename": "wyrestorm_networkhd.zip"
+  "filename": "wyrestorm_networkhd.zip",
+  "homeassistant": "2026.3.0"
 }

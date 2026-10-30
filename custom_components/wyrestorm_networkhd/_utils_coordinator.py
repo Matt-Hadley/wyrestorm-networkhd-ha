@@ -3,60 +3,73 @@
 import logging
 from typing import Any
 
-try:
-    from wyrestorm_networkhd.models.api_query import DeviceInfo, DeviceJsonString, DeviceStatus
-except ImportError:
-    # Fallback for testing or when models aren't available
-    DeviceInfo = Any
-    DeviceJsonString = Any
-    DeviceStatus = Any
+from wyrestorm_networkhd.models.api_query import DeviceInfo, DeviceJsonString, DeviceStatus
 
-from .models.device_receiver_transmitter import create_device_from_wyrestorm_models
+from .models.device_receiver_transmitter import (
+    DeviceReceiver,
+    DeviceTransmitter,
+    create_device_from_wyrestorm_models,
+)
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _json_from_name(name: str, status: DeviceStatus | None, info: DeviceInfo | None) -> DeviceJsonString | None:
+    """Build a minimal DeviceJsonString for a device missing from the controller's device list."""
+    upper = name.upper()
+    if "-RX-" in upper:
+        device_type = "Receiver"
+    elif "-TX-" in upper:
+        device_type = "Transmitter"
+    else:
+        return None
+    source = status or info
+    return DeviceJsonString(
+        aliasName=source.aliasname if source else name,
+        deviceType=device_type,
+        group=[],
+        ip=(info.ip4addr if info else None) or "",
+        online=True,  # it answered a status/info query
+        sequence=0,
+        trueName=name,
+    )
 
 
 def build_device_collections(
     device_json_list: list[DeviceJsonString],
     device_status_list: list[DeviceStatus],
     device_info_list: list[DeviceInfo],
-) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Build device collections from all data sources."""
-    transmitters = {}
-    receivers = {}
+) -> tuple[dict[str, DeviceTransmitter], dict[str, DeviceReceiver]]:
+    """Build device collections from the union of all data sources.
 
-    # Create device mapping by true name from device_json (primary source)
-    for device_json in device_json_list:
-        device_name = device_json.trueName
+    Endpoints missing from status/info (typically offline ones) are kept so they show as offline
+    instead of disappearing.
+    """
+    transmitters: dict[str, DeviceTransmitter] = {}
+    receivers: dict[str, DeviceReceiver] = {}
 
-        # Find corresponding status and info
-        device_status = next((d for d in device_status_list if d.name == device_name), None)
-        device_info = next((d for d in device_info_list if d.name == device_name), None)
+    json_by_name = {d.trueName: d for d in device_json_list}
+    status_by_name = {d.name: d for d in device_status_list}
+    info_by_name = {d.name: d for d in device_info_list}
 
-        if device_status and device_info:
-            try:
-                device = create_device_from_wyrestorm_models(device_json, device_status, device_info)
+    for name in json_by_name | status_by_name | info_by_name:
+        status = status_by_name.get(name)
+        info = info_by_name.get(name)
+        device_json = json_by_name.get(name) or _json_from_name(name, status, info)
+        if device_json is None:
+            _LOGGER.debug("Skipping %s: unknown device type", name)
+            continue
+        try:
+            device = create_device_from_wyrestorm_models(device_json, status, info)
+        except ValueError as err:
+            _LOGGER.warning("Failed to create device %s: %s", name, err)
+            continue
+        if isinstance(device, DeviceTransmitter):
+            transmitters[device.true_name] = device
+        else:
+            receivers[device.true_name] = device
 
-                if device.device_type == "Transmitter":
-                    transmitters[device.true_name] = device
-                else:  # Receiver
-                    receivers[device.true_name] = device
-
-                _LOGGER.debug(
-                    "Created %s device: %s (%s)",
-                    device.device_type.lower(),
-                    device.alias_name,
-                    device.true_name,
-                )
-            except Exception as err:
-                _LOGGER.warning("Failed to create device %s: %s", device_name, err)
-
-    _LOGGER.info(
-        "Successfully processed %d transmitters and %d receivers",
-        len(transmitters),
-        len(receivers),
-    )
-
+    _LOGGER.debug("Processed %d transmitters and %d receivers", len(transmitters), len(receivers))
     return transmitters, receivers
 
 
@@ -78,7 +91,7 @@ def process_matrix_assignments(matrix_response: Any) -> dict[str, str]:
                 matrix_assignments[receiver_alias] = source_alias
                 _LOGGER.debug("Matrix assignment: %s -> %s", source_alias, receiver_alias)
 
-        _LOGGER.info("Processed %d matrix assignments", len(matrix_assignments))
+        _LOGGER.debug("Processed %d matrix assignments", len(matrix_assignments))
 
     except Exception as err:
         _LOGGER.warning("Failed to process matrix data: %s", err)

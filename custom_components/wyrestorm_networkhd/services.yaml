@@ -1,37 +1,36 @@
-# Service definitions for WyreStorm NetworkHD integration
-set_matrix:
-  name: Set Matrix Routing
-  description: Route video from source to target display(s)
+matrix_set:
   fields:
-    source:
-      name: Source Device
-      description: Source device alias name, or leave empty to disconnect
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: wyrestorm_networkhd
+    source_device:
       required: false
       example: "Apple TV"
       selector:
         text:
-    target:
-      name: Target Device(s)
-      description: Target receiver device alias name(s)
+    target_device:
       required: true
       example: "Living Room"
       selector:
         text:
+          multiple: true
 
-set_power:
-  name: Control Display Power
-  description: Control power state of displays connected to receivers
+power_control:
   fields:
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: wyrestorm_networkhd
     devices:
-      name: Receiver Devices
-      description: Receiver device true name(s) to control
       required: true
-      example: "DEC_0A0B0C"
+      example: "Living Room"
       selector:
         text:
+          multiple: true
     power_state:
-      name: Power State
-      description: Power state to set (on or off)
       required: true
       selector:
         select:

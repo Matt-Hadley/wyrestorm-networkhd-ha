@@ -1,0 +1,137 @@
+"""Tests for the config flow."""
+
+from unittest.mock import MagicMock
+
+import pytest
+from homeassistant.config_entries import SOURCE_USER
+from homeassistant.const import CONF_HOST, Platform
+from homeassistant.core import HomeAssistant
+from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.helpers import (
+    device_registry as dr,
+    entity_registry as er,
+)
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+from wyrestorm_networkhd.exceptions import (
+    AuthenticationError,
+    ConnectionError as NHDConnectionError,
+)
+
+from custom_components.wyrestorm_networkhd.const import CONF_UPDATE_INTERVAL, DOMAIN
+
+from .conftest import ENTRY_DATA, HOST
+
+NEW_HOST = "192.0.2.20"
+
+
+async def test_user_flow_success(hass: HomeAssistant, mock_client: MagicMock) -> None:
+    """A reachable controller creates an entry keyed by host."""
+    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER})
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {}
+
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], ENTRY_DATA)
+    await hass.async_block_till_done()
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["title"] == f"WyreStorm NetworkHD ({HOST})"
+    assert result["data"] == ENTRY_DATA
+    assert result["result"].unique_id == HOST
+    mock_client.disconnect.assert_awaited()
+
+
+@pytest.mark.parametrize(
+    ("side_effect", "error"),
+    [
+        (AuthenticationError("wyrestorm", HOST), "invalid_auth"),
+        (NHDConnectionError("refused"), "cannot_connect"),
+        (TimeoutError(), "cannot_connect"),
+        (RuntimeError("boom"), "unknown"),
+    ],
+)
+async def test_user_flow_errors_then_recover(
+    hass: HomeAssistant, mock_client: MagicMock, side_effect: Exception, error: str
+) -> None:
+    """Connection failures map to form errors, and the flow recovers."""
+    mock_client.connect.side_effect = side_effect
+    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER})
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], ENTRY_DATA)
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": error}
+
+    mock_client.connect.side_effect = None
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], ENTRY_DATA)
+    await hass.async_block_till_done()
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+
+
+async def test_user_flow_duplicate(hass: HomeAssistant, config_entry: MockConfigEntry, mock_client: MagicMock) -> None:
+    """A controller that is already configured aborts."""
+    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER})
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], ENTRY_DATA)
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "already_configured"
+
+
+async def test_reconfigure_new_host(hass: HomeAssistant, setup_integration: MockConfigEntry) -> None:
+    """Reconfiguring to a new host updates the unique id and keeps the controller device/entity."""
+    entry = setup_integration
+    dev_reg, ent_reg = dr.async_get(hass), er.async_get(hass)
+    controller = dev_reg.async_get_device_by_identifier((DOMAIN, HOST), entry.entry_id)
+    reboot_id = ent_reg.async_get_entity_id(Platform.BUTTON, DOMAIN, f"{DOMAIN}_{HOST}_controller_reboot")
+    assert controller and reboot_id
+
+    result = await entry.start_reconfigure_flow(hass)
+    assert result["type"] is FlowResultType.FORM
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {**ENTRY_DATA, CONF_HOST: NEW_HOST})
+    await hass.async_block_till_done()
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reconfigure_successful"
+    assert entry.unique_id == NEW_HOST
+    assert entry.data[CONF_HOST] == NEW_HOST
+    assert entry.title == f"WyreStorm NetworkHD ({NEW_HOST})"
+    assert dev_reg.async_get_device_by_identifier((DOMAIN, NEW_HOST), entry.entry_id).id == controller.id
+    assert ent_reg.async_get_entity_id(Platform.BUTTON, DOMAIN, f"{DOMAIN}_{NEW_HOST}_controller_reboot") == reboot_id
+
+
+async def test_reconfigure_same_host_error_then_success(
+    hass: HomeAssistant, setup_integration: MockConfigEntry, mock_client: MagicMock
+) -> None:
+    """Reconfigure shows connection errors, then saves new credentials."""
+    entry = setup_integration
+    result = await entry.start_reconfigure_flow(hass)
+    mock_client.connect.side_effect = NHDConnectionError("down")
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {**ENTRY_DATA, "password": "new"})
+    assert result["errors"] == {"base": "cannot_connect"}
+
+    mock_client.connect.side_effect = None
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {**ENTRY_DATA, "password": "new"})
+    await hass.async_block_till_done()
+    assert result["reason"] == "reconfigure_successful"
+    assert entry.data["password"] == "new"
+    assert entry.unique_id == HOST
+
+
+async def test_reconfigure_host_collision(hass: HomeAssistant, setup_integration: MockConfigEntry) -> None:
+    """Reconfiguring onto another entry's host aborts."""
+    MockConfigEntry(domain=DOMAIN, unique_id=NEW_HOST, data={**ENTRY_DATA, CONF_HOST: NEW_HOST}).add_to_hass(hass)
+    result = await setup_integration.start_reconfigure_flow(hass)
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {**ENTRY_DATA, CONF_HOST: NEW_HOST})
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "already_configured"
+    assert setup_integration.data[CONF_HOST] == HOST
+
+
+async def test_options_flow(hass: HomeAssistant, setup_integration: MockConfigEntry) -> None:
+    """Options only edit the update interval, and the entry reloads with it."""
+    entry = setup_integration
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    assert result["type"] is FlowResultType.FORM
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {CONF_UPDATE_INTERVAL: 120})
+    await hass.async_block_till_done()
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert entry.options == {CONF_UPDATE_INTERVAL: 120}
+    assert entry.data == ENTRY_DATA
+    assert entry.runtime_data.update_interval.total_seconds() == 120

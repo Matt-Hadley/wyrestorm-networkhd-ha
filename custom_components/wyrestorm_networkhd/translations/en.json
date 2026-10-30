@@ -1,0 +1,127 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "WyreStorm NetworkHD Controller",
+        "description": "Enter the SSH connection details for your WyreStorm NetworkHD controller.",
+        "data": {
+          "host": "Host",
+          "username": "Username",
+          "password": "Password",
+          "port": "Port"
+        },
+        "data_description": {
+          "host": "The IP address or hostname of your NetworkHD controller",
+          "username": "SSH username for the controller (default: wyrestorm)",
+          "password": "SSH password for the controller (default: networkhd)",
+          "port": "SSH port for the controller (default: 10022)"
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigure WyreStorm NetworkHD",
+        "description": "Update the SSH connection details for your WyreStorm NetworkHD controller.",
+        "data": {
+          "host": "Host",
+          "username": "Username",
+          "password": "Password",
+          "port": "Port"
+        },
+        "data_description": {
+          "host": "The IP address or hostname of your NetworkHD controller",
+          "username": "SSH username for the controller",
+          "password": "SSH password for the controller",
+          "port": "SSH port for the controller"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect",
+      "invalid_auth": "Invalid authentication",
+      "unknown": "Unexpected error"
+    },
+    "abort": {
+      "already_configured": "Device is already configured",
+      "reconfigure_successful": "Re-configuration was successful"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "WyreStorm NetworkHD Options",
+        "data": {
+          "update_interval": "Update interval (seconds)"
+        },
+        "data_description": {
+          "update_interval": "Fallback polling interval (10-300 seconds); changes are also pushed by the controller"
+        }
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "controller_link": { "name": "Controller link" },
+      "video_input": { "name": "Video input" },
+      "video_output": { "name": "Video output" }
+    },
+    "button": {
+      "controller_reboot": { "name": "Reboot controller" },
+      "display_power_on": { "name": "Display power on" },
+      "display_power_off": { "name": "Display power off" }
+    },
+    "select": {
+      "source": { "name": "Input source" }
+    }
+  },
+  "exceptions": {
+    "command_failed": {
+      "message": "Command to the NetworkHD controller at {host} failed: {error}"
+    },
+    "device_not_found": {
+      "message": "No loaded NetworkHD controller has all of these devices: {devices}"
+    },
+    "device_ambiguous": {
+      "message": "More than one NetworkHD controller has the devices {devices}; set config_entry_id to choose one"
+    },
+    "entry_not_loaded": {
+      "message": "Config entry {entry} is not a loaded WyreStorm NetworkHD controller"
+    }
+  },
+  "services": {
+    "matrix_set": {
+      "name": "Set matrix routing",
+      "description": "Routes a transmitter to one or more receivers, or disconnects the receivers.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Controller",
+          "description": "The controller to use. Only needed when the device names exist on more than one controller."
+        },
+        "source_device": {
+          "name": "Source device",
+          "description": "Transmitter alias or true name. Leave empty to disconnect the receivers."
+        },
+        "target_device": {
+          "name": "Target devices",
+          "description": "Receiver alias(es) or true name(s)."
+        }
+      }
+    },
+    "power_control": {
+      "name": "Control display power",
+      "description": "Sends a power on/off command to the displays attached to receivers.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Controller",
+          "description": "The controller to use. Only needed when the device names exist on more than one controller."
+        },
+        "devices": {
+          "name": "Receiver devices",
+          "description": "Receiver alias(es) or true name(s)."
+        },
+        "power_state": {
+          "name": "Power state",
+          "description": "Power state to send (on or off)."
+        }
+      }
+    }
+  }
+}

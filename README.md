@@ -3,353 +3,207 @@
 [![GitHub Release](https://img.shields.io/github/release/Matt-Hadley/wyrestorm-networkhd-ha.svg?style=flat-square)](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/releases)
 [![License](https://img.shields.io/github/license/Matt-Hadley/wyrestorm-networkhd-ha.svg?style=flat-square)](LICENSE)
 [![HACS](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=flat-square)](https://hacs.xyz/)
-[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.12%2B-41BDF5.svg?style=flat-square)](https://www.home-assistant.io/)
+[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2026.3%2B-41BDF5.svg?style=flat-square)](https://www.home-assistant.io/)
 
-A comprehensive Home Assistant integration for WyreStorm NetworkHD devices, providing real-time control and monitoring of matrix switching, device status, and display power management.
+A Home Assistant custom integration for WyreStorm NetworkHD AV-over-IP systems. It connects to the NetworkHD controller
+over SSH and lets you route transmitters to receivers, switch the displays attached to receivers on and off, and see
+whether each endpoint is online and passing video.
 
-## Features
+It is built on the [wyrestorm-networkhd](https://github.com/Matt-Hadley/wyrestorm-networkhd-py) Python library.
 
-🎯 **Real-time Device Monitoring** - Live status updates for all encoders and decoders  
-🔀 **Matrix Switching Control** - Route sources to displays with instant feedback  
-⚡ **Display Power Management** - CEC/RS232/IR power control for connected displays  
-📊 **Comprehensive Status Sensors** - Controller connectivity, video activity, and display power  
-🎛️ **Source Selection** - Easy source switching for decoder devices  
-🔧 **Advanced Services** - Automation-ready custom services with proper schemas
-⚙️ **Configurable Polling** - Adjustable update intervals (10-300 seconds)
-🚀 **Performance Optimized** - Smart caching and selective refresh reduce API calls by 80-90%
-🔔 **Real-time Notifications** - Instant updates for device online/offline and video signal changes
-🔒 **Robust Error Handling** - Graceful degradation when devices go offline
-🏗️ **Clean Architecture** - Modern coordinator pattern with comprehensive test coverage
-⚙️ **Professional CI/CD** - Automated testing, HACS validation, and releases with GitHub Actions
+## Requirements
 
-## Supported Devices
+- Home Assistant 2026.3 or newer.
+- A NetworkHD controller: NHD-000-CTL or NHD-CTL-PRO.
+- **SSH enabled on the controller (port 10022).** The controller's default API access is Telnet, which this integration
+  does not support; enable SSH on the controller before adding the integration.
+- NetworkHD transmitters and receivers supported by the
+  [wyrestorm-networkhd](https://github.com/Matt-Hadley/wyrestorm-networkhd-py) library.
 
-- WyreStorm NetworkHD 110/140 series
-- WyreStorm NetworkHD 400/500 series  
-- WyreStorm NetworkHD 600 series
-- Any WyreStorm NetworkHD device with SSH API support
+Tested on an NHD-000-CTL (firmware v9.4.7, API v1.28) with NHD-400 transmitters and receivers (firmware v2.5.6).
 
 ## Installation
 
-### HACS (Recommended)
+### HACS
 
-1. Add this repository to HACS as a custom repository
-2. Install "WyreStorm NetworkHD" from HACS
-3. Restart Home Assistant
-4. Go to Configuration > Integrations
-5. Click "+" and search for "WyreStorm NetworkHD"
+1. In HACS, open the menu and choose **Custom repositories**.
+2. Add `https://github.com/Matt-Hadley/wyrestorm-networkhd-ha` with category **Integration**.
+3. Install **WyreStorm NetworkHD** and restart Home Assistant.
 
-### Manual Installation
+### Manual
 
-1. Download the latest release
-2. Copy the `custom_components/wyrestorm_networkhd` folder to your `config/custom_components/` directory
-3. Restart Home Assistant
-4. Add the integration through the UI
+1. Download `wyrestorm_networkhd.zip` from the
+   [latest release](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/releases).
+2. Unzip it into `config/custom_components/wyrestorm_networkhd/` (the zip holds the integration files directly, so
+   create the folder first).
+3. Restart Home Assistant.
 
 ## Configuration
 
-The integration is configured entirely through the Home Assistant UI:
+Go to **Settings > Devices & services > Add integration** and search for **WyreStorm NetworkHD**.
 
-### Initial Setup
-1. **Host**: IP address of your NetworkHD controller
-2. **Username**: SSH username (default: `wyrestorm`)
-3. **Password**: SSH password (default: `networkhd`)
-4. **Port**: SSH port (default: `10022`)
-5. **Update Interval**: Polling frequency in seconds (default: 60, range: 10-300)
+| Field    | Default     | Notes                                    |
+| -------- | ----------- | ---------------------------------------- |
+| Host     |             | IP address or hostname of the controller |
+| Username | `wyrestorm` | Controller SSH username                  |
+| Password | `networkhd` | Controller SSH password                  |
+| Port     | `10022`     | Controller SSH port                      |
 
-### Options (Configurable After Setup)
-- **Update Interval**: Modify the polling frequency through integration options
+The integration connects and queries the controller's version before creating the entry. If that fails you see one of:
 
-## Entities
+- **Failed to connect** (`cannot_connect`): the controller is unreachable, SSH is not enabled, or the port is wrong.
+- **Invalid authentication** (`invalid_auth`): the username or password was rejected.
+- **Unexpected error** (`unknown`): anything else; check the Home Assistant log.
 
-The integration creates multiple entity types for comprehensive device control and monitoring:
+Each controller can be added once (its host identifies it).
 
-### Binary Sensors
+### Options
 
-#### Controller Link
-- **Entity ID**: `binary_sensor.{device_name}_controller_link`
-- **Purpose**: Indicates if the device is online and responding to the controller
-- **Data Source**: `config_get_devicejsonstring()` → `online` field
-- **Real-time Updates**: Endpoint notifications
+**Configure** on the integration entry has one option:
 
-#### Video Input
-- **Entity ID**: `binary_sensor.{device_name}_video_input`
-- **Purpose**: Shows if the encoder has an active HDMI input signal (source connected)
-- **Data Source**: `config_get_device_status()` → `hdmi in active` field
-- **Real-time Updates**: Video notifications
-- **Device Types**: Encoders only
+- **Update interval (seconds)**: fallback polling interval, 10 to 300, default 60. The integration reloads when you
+  change it.
 
-#### Video Output
-- **Entity ID**: `binary_sensor.{device_name}_video_output`  
-- **Purpose**: Shows if the decoder is outputting an active HDMI signal (display connected)
-- **Data Source**: `config_get_device_status()` → `hdmi out active` field
-- **Real-time Updates**: Video notifications
-- **Device Types**: Decoders only
+### Reconfigure
 
+**Reconfigure** on the integration entry changes the host, username, password and port. The new details are tested
+before they are saved. Changing the host keeps the same controller device and its entities.
 
-### Select Entities
+## Devices and entities
 
-#### Input Source
-- **Entity ID**: `select.{device_name}_source`
-- **Purpose**: Select which encoder (source) feeds to this decoder (display)
-- **Options**: List of available encoder devices + "None" (disconnect)
-- **Data Source**: `matrix_get()` for current assignments
-- **Device Types**: Decoders only
+The integration creates one device for the controller and one for each transmitter and receiver. Endpoint devices are
+named `Transmitter - <alias>` and `Receiver - <alias>`, using the alias set on the controller (or the endpoint's IP
+address or true name when it has no alias). Entity IDs are built from the device name and the entity name when the
+entity is first added.
 
-### Button Entities
+The examples below use a controller at `192.168.1.50`, a transmitter with alias `Apple TV` and a receiver with alias
+`Living Room TV`.
 
-#### Display Power On/Off
-- **Entity IDs**: 
-  - `button.{device_name}_display_power_on`
-  - `button.{device_name}_display_power_off`
-- **Purpose**: Send power on/off commands to connected displays
-- **Method**: Uses sink power commands (CEC/RS232/IR depending on configuration)
-- **Device Types**: Decoders only
+### Controller: `WyreStorm NetworkHD (<host>)`
 
-## Data Sources and API Mapping
+| Entity            | Example entity ID                                           | Notes                                                       |
+| ----------------- | ----------------------------------------------------------- | ----------------------------------------------------------- |
+| Reboot controller | `button.wyrestorm_networkhd_192_168_1_50_reboot_controller` | Reboots the controller; the integration reconnects after it |
 
-The integration uses multiple WyreStorm API endpoints to provide comprehensive device information:
+### Transmitter: `Transmitter - <alias>`
 
-### Primary Data Sources
+| Entity          | Example entity ID                                    | Notes                                                                                                                                  |
+| --------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Controller link | `binary_sensor.transmitter_apple_tv_controller_link` | Connectivity (diagnostic). On while the endpoint is online. Attributes: `device_type`, `ip_address`, `mac_address`, `firmware_version` |
+| Video input     | `binary_sensor.transmitter_apple_tv_video_input`     | On while the HDMI input frame rate is above 0. Attribute: `hdmi_in_frame_rate`                                                         |
 
-#### 1. Device JSON String (`config_get_devicejsonstring()`)
-```json
-{
-  "aliasName": "Kitchen",
-  "deviceType": "Receiver",
-  "online": true,
-  "ip": "192.168.0.169",
-  "trueName": "NHD-400-RX-E4CE021114AB"
-}
-```
-**Used For:**
-- Controller Link binary sensor state
-- Device identification and naming
-- IP address information
+### Receiver: `Receiver - <alias>`
 
-#### 2. Device Status (`config_get_device_status()`)
-```json
-{
-  "aliasname": "Kitchen",
-  "hdmi in active": "false",
-  "hdmi out active": "true",
-  "hdmi out resolution": "1920x1080",
-  "audio output format": "lpcm",
-  "hdcp": "hdcp14"
-}
-```
-**Used For:**
-- Video Input/Output Active binary sensor states
-- Additional device attributes (resolution, audio format, HDCP status)
+| Entity            | Example entity ID                                       | Notes                                                                            |
+| ----------------- | ------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Controller link   | `binary_sensor.receiver_living_room_tv_controller_link` | As for transmitters                                                              |
+| Video output      | `binary_sensor.receiver_living_room_tv_video_output`    | On while the HDMI output frame rate is above 0. Attribute: `hdmi_out_frame_rate` |
+| Input source      | `select.receiver_living_room_tv_input_source`           | Options are `None` (disconnect) and every transmitter alias                      |
+| Display power on  | `button.receiver_living_room_tv_display_power_on`       | Sends display power on to the display attached to the receiver                   |
+| Display power off | `button.receiver_living_room_tv_display_power_off`      | Sends display power off                                                          |
 
-#### 3. Matrix Status (`matrix_get()`)
-**Used For:**
-- Current source assignments for Input Source select entities
-- Available source options for decoders
+### Availability and updates
 
-### Real-time Notifications
-
-The integration subscribes to real-time device notifications for instant updates:
-
-#### Endpoint Notifications
-- **Updates**: Controller Link binary sensors
-- **Trigger**: Device online/offline state changes
-
-#### Video Notifications  
-- **Updates**: Video Input/Output Active binary sensors
-- **Trigger**: HDMI signal presence changes
-
-
-### Update Strategy
-
-- **Polling**: Configurable interval (10-300 seconds) for API data refresh
-- **Notifications**: Real-time updates for immediate status changes
-- **Data Combination**: Merges information from multiple sources for comprehensive device status
-
-## Device Naming Convention
-
-Devices are automatically named using the format:
-- **Controllers**: `Controller - {host_ip}`
-- **Encoders**: `Encoder - {alias_name_or_ip}`
-- **Decoders**: `Decoder - {alias_name_or_ip}`
+- If the controller cannot be reached, all entities become unavailable. The integration reconnects automatically on the
+  next update.
+- If an endpoint is offline, its **Controller link** sensor shows off and its other entities are unavailable.
+- The controller pushes endpoint online/offline and video found/lost notifications, which trigger a refresh. Polling at
+  the update interval is a fallback.
 
 ## Services
 
+Devices are named by their alias or their true name. When more than one loaded controller has all the named devices, set
+`config_entry_id` to choose one.
+
 ### `wyrestorm_networkhd.matrix_set`
-Route sources to displays.
+
+Routes a transmitter to one or more receivers, or disconnects the receivers.
+
+| Field             | Required | Description                                                       |
+| ----------------- | -------- | ----------------------------------------------------------------- |
+| `source_device`   | No       | Transmitter alias or true name. Leave out to disconnect receivers |
+| `target_device`   | Yes      | Receiver alias(es) or true name(s); one name or a list            |
+| `config_entry_id` | No       | The controller to use                                             |
 
 ```yaml
-service: wyrestorm_networkhd.matrix_set
+action: wyrestorm_networkhd.matrix_set
 data:
-  source_device: "AppleTV"
-  target_device: 
-    - "Kitchen"
-    - "Dining"
+  source_device: "Apple TV"
+  target_device:
+    - "Living Room TV"
 ```
 
 ### `wyrestorm_networkhd.power_control`
-Control display power via sink power commands.
+
+Sends display power on or off to the displays attached to receivers.
+
+| Field             | Required | Description                                            |
+| ----------------- | -------- | ------------------------------------------------------ |
+| `devices`         | Yes      | Receiver alias(es) or true name(s); one name or a list |
+| `power_state`     | Yes      | `on` or `off`                                          |
+| `config_entry_id` | No       | The controller to use                                  |
 
 ```yaml
-service: wyrestorm_networkhd.power_control
+action: wyrestorm_networkhd.power_control
 data:
   devices:
-    - "Kitchen" 
-    - "Dining"
-  power_state: "on"  # or "off"
+    - "Living Room TV"
+  power_state: "on"
 ```
 
-## Automation Examples
+### Errors
 
-### Scene-based Matrix Switching
+- A device name that no loaded controller has, or that more than one has, fails with a validation error naming the
+  devices (set `config_entry_id` in the second case).
+- A `config_entry_id` that is not a loaded WyreStorm NetworkHD entry fails with a validation error.
+- If the controller rejects or fails the command, the action fails with "Command to the NetworkHD controller at ...
+  failed".
+
+## Example automation
+
+Route the Apple TV to the living room display and switch the display on when the Apple TV starts sending video:
+
 ```yaml
 automation:
-  - alias: "Movie Night Setup"
-    trigger:
-      - platform: state
-        entity_id: input_boolean.movie_mode
+  - alias: "Living room: watch Apple TV"
+    triggers:
+      - trigger: state
+        entity_id: binary_sensor.transmitter_apple_tv_video_input
         to: "on"
-    action:
-      # Route Blu-ray player to all displays
-      - service: wyrestorm_networkhd.matrix_set
+    actions:
+      - action: select.select_option
+        target:
+          entity_id: select.receiver_living_room_tv_input_source
         data:
-          source_device: "BluRay"
-          target_device:
-            - "Kitchen"
-            - "Dining"
-      # Turn on all displays
-      - service: wyrestorm_networkhd.power_control
+          option: "Apple TV"
+      - action: wyrestorm_networkhd.power_control
         data:
-          devices:
-            - "Kitchen"
-            - "Dining" 
+          devices: "Living Room TV"
           power_state: "on"
 ```
 
-### Display Power Management Based on Activity
+## Diagnostics
 
-#### Turn On Displays When Source Comes Online
-```yaml
-automation:
-  - alias: "Auto Power On Displays When Source Active"
-    trigger:
-      - platform: state
-        entity_id: 
-          - binary_sensor.appletv_video_input
-          - binary_sensor.bluray_video_input
-        to: "on"
-    condition:
-      # Only trigger if the encoder is currently routed to decoders
-      - condition: template
-        value_template: >
-          {% set encoder = trigger.entity_id.split('.')[1].split('_video_input')[0] %}
-          {% set kitchen_source = states('select.kitchen_source') %}
-          {% set dining_source = states('select.dining_source') %}
-          {{ encoder == kitchen_source or encoder == dining_source }}
-    action:
-      # Turn on displays that are currently set to this encoder
-      - service: wyrestorm_networkhd.power_control
-        data:
-          devices: >
-            {% set encoder = trigger.entity_id.split('.')[1].split('_video_input_active')[0] %}
-            {% set devices = [] %}
-            {% if states('select.kitchen_source') == encoder %}
-              {% set devices = devices + ['Kitchen'] %}
-            {% endif %}
-            {% if states('select.dining_source') == encoder %}
-              {% set devices = devices + ['Dining'] %}
-            {% endif %}
-            {{ devices }}
-          power_state: "on"
+On the integration entry, choose **Download diagnostics**. The file contains the entry and the latest controller data,
+with the host, username, password, IP addresses, gateway and MAC addresses redacted.
 
-#### Turn Off Displays When Source Goes Offline  
-  - alias: "Auto Power Off Displays When Source Inactive"
-    trigger:
-      - platform: state
-        entity_id: 
-          - binary_sensor.appletv_video_input
-          - binary_sensor.bluray_video_input
-        to: "off"
-        for:
-          minutes: 5
-    condition:
-      # Only trigger if the encoder is currently routed to decoders
-      - condition: template
-        value_template: >
-          {% set encoder = trigger.entity_id.split('.')[1].split('_video_input')[0] %}
-          {% set kitchen_source = states('select.kitchen_source') %}
-          {% set dining_source = states('select.dining_source') %}
-          {{ encoder == kitchen_source or encoder == dining_source }}
-    action:
-      # Turn off displays that are currently set to this encoder
-      - service: wyrestorm_networkhd.power_control
-        data:
-          devices: >
-            {% set encoder = trigger.entity_id.split('.')[1].split('_video_input_active')[0] %}
-            {% set devices = [] %}
-            {% if states('select.kitchen_source') == encoder %}
-              {% set devices = devices + ['Kitchen'] %}
-            {% endif %}
-            {% if states('select.dining_source') == encoder %}
-              {% set devices = devices + ['Dining'] %}
-            {% endif %}
-            {{ devices }}
-          power_state: "off"
-```
+## Security
 
-### Status Monitoring and Notifications
-```yaml
-automation:
-  - alias: "Notify When Encoder Goes Offline"
-    trigger:
-      - platform: state
-        entity_id: 
-          - binary_sensor.appletv_controller_link
-          - binary_sensor.bluray_controller_link
-        to: "off"
-        for:
-          minutes: 2
-    action:
-      - service: notify.mobile_app_phone
-        data:
-          title: "WyreStorm Alert"
-          message: "{{ state_attr(trigger.entity_id, 'friendly_name') }} has gone offline"
-```
-
-## Development
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed development setup, workflow, and contribution guidelines.
+The integration accepts the controller's SSH host key without verifying it, so nothing protects against another device
+on your network impersonating the controller and receiving the SSH credentials. Keep the controller on a trusted network
+segment.
 
 ## Troubleshooting
 
-### Connection Issues
-- **SSH Access**: Verify SSH is enabled on your NetworkHD controller
-- **Network Connectivity**: Ensure port 10022 is accessible from Home Assistant
-- **Credentials**: Confirm username/password (defaults: `wyrestorm`/`networkhd`)
-- **Firewall**: Check that no firewall is blocking the connection
+- **Failed to connect**: check that SSH is enabled on the controller, that port 10022 is reachable from Home Assistant,
+  and that the host is correct.
+- **Endpoints unavailable**: check that they are online on the controller. Offline endpoints are kept and become
+  available again when they come back.
+- **Display power does nothing**: the receiver sends the command to its display; check that display control is set up
+  for that receiver on the controller and that the display supports it.
 
-### Device Discovery Issues
-- **Device Status**: Ensure devices are online and responding to SSH
-- **Logs**: Check Home Assistant logs for connection errors
-- **API Response**: Verify devices appear in controller's device list
+To enable debug logging, add this to `configuration.yaml` and restart:
 
-### Entity States Not Updating
-- **Polling Interval**: Check if update interval is appropriate for your needs
-- **Notifications**: Verify real-time notifications are being received
-- **Data Sources**: Confirm API endpoints are returning expected data
-
-### Display Power Control Not Working
-- **Sink Power Setup**: Verify sink power is configured on decoder devices
-- **Display Compatibility**: Ensure connected displays support CEC/RS232/IR control
-- **Notification Monitoring**: Check if sink power notifications are being received
-
-### Performance Issues
-- **Polling Frequency**: Reduce update interval if experiencing high load
-- **Network Latency**: Consider network performance to controller
-- **Device Count**: Large numbers of devices may require longer intervals
-
-### Enable Debug Logging
-Add to your `configuration.yaml`:
 ```yaml
 logger:
   logs:
@@ -357,75 +211,13 @@ logger:
     wyrestorm_networkhd: debug
 ```
 
-### Common Log Messages
-- `"Using polling interval of X seconds"` - Confirms configured update interval
-- `"Processing devices from combined JSON and status data"` - Normal data processing
-- `"Successfully processed X real devices"` - Successful device discovery
-- `"Controller Link"` notifications - Real-time connectivity updates
-- `"Sink power notification"` - Display power status changes
-
-## Performance & Responsiveness
-
-This integration is optimized for fast, responsive control with minimal network overhead:
-
-### Response Times
-- **Switching receiver inputs**: ~500ms to update UI and reflect new video status
-- **Display power commands**: Instant (no status refresh needed)
-- **Receiver/Transmitter status changes**: <50ms via real-time notifications
-- **Regular polling**: Configurable 10-300 second intervals
-
-### Smart Updates
-The integration only fetches what's needed:
-- **Switching receiver inputs**: Updates routing and video status only
-- **Display power commands**: No refresh (displays don't affect matrix status)
-- **Receiver/Transmitter status changes**: Instant updates when devices go online/offline or video signals change
-- **Device configuration**: Cached for 10 minutes (rarely changes)
-
-### Network Efficiency
-- Uses selective API calls instead of full refreshes
-- Caches static device information
-- Subscribes to SSH notifications for instant updates without polling
-- Typical operation uses 80% fewer API calls than a naive implementation
-
-## Advanced Configuration
-
-### Customizing Entity Names
-Device names can be customized by changing the alias names on your WyreStorm controller. The integration will automatically use these names for entity creation.
-
-### Integration Options
-After initial setup, you can modify:
-- **Update Interval**: Change polling frequency through integration options
-- **Reload Required**: Integration automatically reloads when options are changed
-
-### Network Optimization
-For optimal performance:
-- Use wired network connections when possible
-- Consider update intervals based on your automation needs
-- Monitor network traffic if using very short polling intervals
-
-## API Reference
-
-The integration uses the [wyrestorm-networkhd](https://github.com/Matt-Hadley/wyrestorm-networkhd) Python library, which provides:
-
-- **SSH Connection Management**: Automatic reconnection and error handling
-- **API Command Interface**: Full access to WyreStorm API commands
-- **Real-time Notifications**: Event-driven status updates
-- **Data Parsing**: Structured responses from device APIs
+Include the log, the diagnostics file and your controller firmware version when you
+[report a bug](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/issues).
 
 ## Contributing
 
-We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed development setup, workflow guidelines, and contribution process.
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Credits
-
-Built on the excellent [wyrestorm-networkhd](https://github.com/Matt-Hadley/wyrestorm-networkhd) Python library.
-
-## Support
-
-- **Issues**: Report bugs and request features via [GitHub Issues](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/issues)
-- **Discussions**: Join the conversation in [GitHub Discussions](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/discussions)
-- **Home Assistant Community**: Get help in the [Home Assistant Community Forum](https://community.home-assistant.io/)
+MIT; see [LICENSE](LICENSE).

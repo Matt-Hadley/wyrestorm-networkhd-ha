@@ -7,7 +7,7 @@ name = "wyrestorm-networkhd-ha"
 dynamic = ["version"]
 description = "Home Assistant integration for WyreStorm NetworkHD matrix switching and device control"
 requires-python = ">=3.14"
-dependencies = ["voluptuous>=0.13.0", "wyrestorm-networkhd>=2.2.1,<3"]
+dependencies = ["voluptuous>=0.13.0", "wyrestorm-networkhd>=3.0.0,<4"]
 keywords = [
     "wyrestorm",
     "networkhd",
@@ -100,6 +100,12 @@ select = [
     "ARG", # flake8-unused-arguments
     "SIM", # flake8-simplify
 ]
+
+[tool.ruff.lint.per-file-ignores]
+# Home Assistant fixes these callback signatures, used or not.
+"custom_components/**" = ["ARG001", "ARG004"]
+# pytest fixtures requested only for their side effects
+"tests/**" = ["ARG001"]
 
 # Ruff import sorting configuration (replaces isort)
 [tool.ruff.lint.isort]
