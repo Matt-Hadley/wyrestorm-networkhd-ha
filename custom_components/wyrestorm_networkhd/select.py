@@ -21,7 +21,7 @@ async def async_setup_entry(
     """Set up WyreStorm NetworkHD select entities."""
     coordinator = entry.runtime_data
     async_add_entities(
-        WyreStormReceiverSourceSelect(coordinator, rx, "source") for rx in coordinator.data.get_receivers_list()
+        WyreStormReceiverSourceSelect(coordinator, rx, "source") for rx in coordinator.data.device_receivers.values()
     )
 
 
@@ -31,7 +31,7 @@ class WyreStormReceiverSourceSelect(WyreStormEndpointEntity, SelectEntity):
     @property
     def options(self) -> list[str]:
         """Return list of available sources."""
-        return [NO_SOURCE, *(tx.alias_name for tx in self.coordinator.data.get_transmitters_list())]
+        return [NO_SOURCE, *(tx.alias_name for tx in self.coordinator.data.device_transmitters.values())]
 
     @property
     def current_option(self) -> str | None:

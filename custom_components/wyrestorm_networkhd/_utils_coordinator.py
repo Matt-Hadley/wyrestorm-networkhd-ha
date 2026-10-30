@@ -1,7 +1,6 @@
 """Utility functions for WyreStorm NetworkHD Coordinator."""
 
 import logging
-from typing import Any
 
 from wyrestorm_networkhd.models.api_query import DeviceInfo, DeviceJsonString, DeviceStatus
 
@@ -71,29 +70,3 @@ def build_device_collections(
 
     _LOGGER.debug("Processed %d transmitters and %d receivers", len(transmitters), len(receivers))
     return transmitters, receivers
-
-
-def process_matrix_assignments(matrix_response: Any) -> dict[str, str]:
-    """Process matrix assignments into receiver alias -> source alias mapping."""
-    matrix_assignments: dict[str, str] = {}
-
-    if not (matrix_response and hasattr(matrix_response, "assignments")):
-        _LOGGER.debug("No matrix assignments found")
-        return matrix_assignments
-
-    try:
-        assignments = matrix_response.assignments or []
-
-        for assignment in assignments:
-            if hasattr(assignment, "tx") and hasattr(assignment, "rx"):
-                source_alias = assignment.tx
-                receiver_alias = assignment.rx
-                matrix_assignments[receiver_alias] = source_alias
-                _LOGGER.debug("Matrix assignment: %s -> %s", source_alias, receiver_alias)
-
-        _LOGGER.debug("Processed %d matrix assignments", len(matrix_assignments))
-
-    except Exception as err:
-        _LOGGER.warning("Failed to process matrix data: %s", err)
-
-    return matrix_assignments

@@ -18,17 +18,16 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from wyrestorm_networkhd import NHDAPI, NetworkHDClientSSH
 from wyrestorm_networkhd.exceptions import AuthenticationError, NetworkHDError
-from wyrestorm_networkhd.models.api_query import DeviceInfo
+from wyrestorm_networkhd.models.api_query import DeviceInfo, DeviceStatus, Matrix
 
-from ._utils_coordinator import build_device_collections, process_matrix_assignments
+from ._utils_coordinator import build_device_collections
 from .const import CONF_UPDATE_INTERVAL, DEFAULT_PORT, DEFAULT_UPDATE_INTERVAL, DOMAIN, SSH_HOST_KEY_POLICY
 from .models.coordinator import CoordinatorData
-from .models.device_controller import DeviceController
 from .models.device_receiver_transmitter import DeviceReceiver, DeviceTransmitter
 
 _LOGGER = logging.getLogger(__name__)
 
-# Library 2.x raises NetworkHDError/builtins and plain ValueError from parsers; 3.x subclasses these.
+# Library errors subclass NetworkHDError; OSError/ValueError catch anything the transport or parsers raise raw.
 API_ERRORS = (NetworkHDError, OSError, ValueError)
 NOTIFICATION_TYPES = ("endpoint", "video")
 DEVICE_INFO_TTL = 600  # seconds; device info (MAC, firmware, network) rarely changes
@@ -45,6 +44,11 @@ def create_client(data: dict[str, Any]) -> NetworkHDClientSSH:
         password=data[CONF_PASSWORD],
         ssh_host_key_policy=SSH_HOST_KEY_POLICY,
     )
+
+
+def _assignments(matrix: Matrix) -> dict[str, str | None]:
+    """Map receiver alias -> routed transmitter alias (None when disconnected)."""
+    return {a.rx: a.tx for a in matrix.assignments}
 
 
 class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
@@ -74,13 +78,13 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
         self.api: NHDAPI
         self.controller_device_id: str | None = None  # device registry id, set in async_setup_entry
         self._lock = asyncio.Lock()  # one command/response exchange at a time
+        self._device_status: list[DeviceStatus] = []  # kept for diagnostics
         self._device_info: list[DeviceInfo] = []
         self._device_info_time = -float("inf")
 
     async def _async_setup(self) -> None:
         """Connect and subscribe to notifications (runs once before the first refresh)."""
-        # NHDAPI 2.x discovers command modules with blocking imports, so build it off the loop.
-        self.api = await self.hass.async_add_executor_job(NHDAPI, self.client)
+        self.api = NHDAPI(self.client)
         try:
             await self.client.connect()
         except AuthenticationError as err:
@@ -132,22 +136,21 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
     async def _fetch(self) -> CoordinatorData:
         query = self.api.api_query
         version = await query.config_get_version()
-        ip_settings = await query.config_get_ipsetting()
         device_json_list = await query.config_get_devicejsonstring()
-        device_status_list = await query.config_get_device_status()
+        self._device_status = await query.config_get_device_status()
         if time.monotonic() - self._device_info_time > DEVICE_INFO_TTL:
             self._device_info = await query.config_get_device_info()
             self._device_info_time = time.monotonic()
         matrix = await query.matrix_get()
 
         transmitters, receivers = build_device_collections(
-            device_json_list or [], device_status_list or [], self._device_info or []
+            device_json_list or [], self._device_status or [], self._device_info or []
         )
         return CoordinatorData(
-            device_controller=DeviceController.from_wyrestorm_models(version, ip_settings),
+            version=version,
             device_transmitters=transmitters,
             device_receivers=receivers,
-            matrix_assignments=process_matrix_assignments(matrix),
+            matrix_assignments=_assignments(matrix),
             last_update=datetime.now(),
         )
 
@@ -191,7 +194,7 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 )
                 return
         # Not async_set_updated_data: that would cancel a pending debounced refresh and reset the poll timer.
-        self.data = replace(self.data, matrix_assignments=process_matrix_assignments(matrix))
+        self.data = replace(self.data, matrix_assignments=_assignments(matrix))
         self.async_update_listeners()
 
     async def async_set_power(self, receivers: list[DeviceReceiver], power_state: Literal["on", "off"]) -> None:

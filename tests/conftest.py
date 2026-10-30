@@ -17,6 +17,3 @@ if custom_components_path.exists():
 import custom_components  # noqa: E402
 
 custom_components.__path__ = [p for p in custom_components.__path__ if Path(p).is_dir()]
-
-# Import all fixtures from _fixtures.py to make them available globally
-from tests.custom_components.wyrestorm_networkhd._fixtures import *  # noqa: E402, F401, F403

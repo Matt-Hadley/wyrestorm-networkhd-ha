@@ -275,7 +275,9 @@ async def test_diagnostics(hass: HomeAssistant, setup_integration: MockConfigEnt
     diag = await async_get_config_entry_diagnostics(hass, setup_integration)
     assert HOST not in str(diag)
     assert "networkhd" not in str(diag["entry"]["data"])
-    assert diag["data"]["device_controller"]["core_version"] == "9.4.13"
+    assert diag["data"]["version"]["core_version"] == "9.4.13"
+    assert diag["device_info"][0]["mac"] == "**REDACTED**"
+    assert diag["device_status"][0]["name"].startswith("NHD-400-")
 
 
 async def test_setup_auth_failed_starts_reauth(

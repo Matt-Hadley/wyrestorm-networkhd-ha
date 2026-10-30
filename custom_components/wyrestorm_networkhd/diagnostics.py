@@ -22,4 +22,7 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: WyreSto
         "entry": async_redact_data(entry.as_dict(), TO_REDACT),
         "last_update_success": coordinator.last_update_success,
         "data": async_redact_data(asdict(coordinator.data), TO_REDACT),
+        # Raw library models, which carry many more fields than the entities use.
+        "device_status": async_redact_data([asdict(d) for d in coordinator._device_status], TO_REDACT),
+        "device_info": async_redact_data([asdict(d) for d in coordinator._device_info], TO_REDACT),
     }

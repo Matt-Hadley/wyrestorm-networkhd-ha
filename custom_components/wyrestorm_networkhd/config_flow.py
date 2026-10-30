@@ -50,8 +50,7 @@ async def validate_connection(hass: HomeAssistant, data: dict[str, Any]) -> None
     client = create_client(data)
     try:
         await client.connect()
-        api = await hass.async_add_executor_job(NHDAPI, client)
-        await api.api_query.config_get_version()
+        await NHDAPI(client).api_query.config_get_version()
     finally:
         with suppress(*API_ERRORS):
             await client.disconnect()
