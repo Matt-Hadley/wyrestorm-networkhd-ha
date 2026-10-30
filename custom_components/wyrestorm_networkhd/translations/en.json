@@ -8,13 +8,15 @@
           "host": "Host",
           "username": "Username",
           "password": "Password",
-          "port": "Port"
+          "port": "Port",
+          "host_key_fingerprint": "SSH host key fingerprint (optional)"
         },
         "data_description": {
           "host": "The IP address or hostname of your NetworkHD controller",
           "username": "SSH username for the controller (default: wyrestorm)",
           "password": "SSH password for the controller (default: networkhd)",
-          "port": "SSH port for the controller (default: 10022)"
+          "port": "SSH port for the controller (default: 10022)",
+          "host_key_fingerprint": "Pins the controller's SSH key so Home Assistant only sends the credentials to that controller. Get it with `ssh-keyscan -p 10022 <host> | ssh-keygen -lf -` and paste the SHA256 line(s); several are allowed. Leave empty to trust the key the controller presents now (you are asked to confirm it)."
         }
       },
       "reconfigure": {
@@ -24,14 +26,20 @@
           "host": "Host",
           "username": "Username",
           "password": "Password",
-          "port": "Port"
+          "port": "Port",
+          "host_key_fingerprint": "SSH host key fingerprint (optional)"
         },
         "data_description": {
           "host": "The IP address or hostname of your NetworkHD controller",
           "username": "SSH username for the controller",
           "password": "SSH password for the controller",
-          "port": "SSH port for the controller"
+          "port": "SSH port for the controller",
+          "host_key_fingerprint": "Pins the controller's SSH key so Home Assistant only sends the credentials to that controller. Get it with `ssh-keyscan -p 10022 <host> | ssh-keygen -lf -` and paste the SHA256 line(s); several are allowed. Leave empty to trust the key the controller presents now (you are asked to confirm it)."
         }
+      },
+      "confirm_host_key": {
+        "title": "Trust this controller?",
+        "description": "The controller identified itself with SSH host key `{fingerprint}`. Confirm to trust this controller from now on: Home Assistant will refuse to connect, and will not send the credentials, if the key changes. You can change it later with Reconfigure."
       },
       "reauth_confirm": {
         "title": "Reauthenticate WyreStorm NetworkHD",
@@ -49,6 +57,8 @@
     "error": {
       "cannot_connect": "Failed to connect",
       "invalid_auth": "Invalid authentication",
+      "invalid_host_key_fingerprint": "Not a valid SSH host key fingerprint; expected SHA256:... as printed by ssh-keygen -lf",
+      "host_key_mismatch": "The controller presented a different SSH host key ({fingerprint}) than the pinned fingerprint, so no credentials were sent. If you expect this (controller replaced or reset), enter this fingerprint instead; otherwise check that the device at this address is your controller.",
       "unknown": "Unexpected error"
     },
     "abort": {
@@ -85,7 +95,16 @@
       "source": { "name": "Input source" }
     }
   },
+  "issues": {
+    "host_key_mismatch": {
+      "title": "NetworkHD controller SSH host key changed",
+      "description": "The controller at {host} presented SSH host key `{fingerprint}`, which does not match the pinned fingerprint, so Home Assistant did not connect or send the credentials. If the controller was replaced or reset, open the integration, choose Reconfigure and enter this fingerprint (or clear the field to confirm the new key). Otherwise check that nothing else is answering at this address."
+    }
+  },
   "exceptions": {
+    "host_key_mismatch": {
+      "message": "The controller at {host} presented SSH host key {fingerprint}, which does not match the pinned fingerprint"
+    },
     "command_failed": {
       "message": "Command to the NetworkHD controller at {host} failed: {error}"
     },

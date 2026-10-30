@@ -7,6 +7,7 @@ from homeassistant.const import Platform
 DOMAIN: Final = "wyrestorm_networkhd"
 
 CONF_UPDATE_INTERVAL: Final = "update_interval"  # Polling frequency in seconds (entry option)
+CONF_HOST_KEY_FINGERPRINT: Final = "host_key_fingerprint"  # Pinned SSH host key fingerprint(s), list in entry data
 
 # Default connection values
 DEFAULT_PORT: Final = 10022  # WyreStorm standard SSH port
@@ -15,7 +16,7 @@ DEFAULT_PASSWORD: Final = "networkhd"  # Factory default SSH password  # nosec B
 DEFAULT_UPDATE_INTERVAL: Final = 60  # Fallback poll; changes are pushed by controller notifications
 
 # SSH Security Settings
-SSH_HOST_KEY_POLICY: Final = "auto_add"  # Accept unknown host keys (convenience over strict security)
+SSH_HOST_KEY_POLICY: Final = "auto_add"  # Accept unknown host keys unless a fingerprint is pinned
 
 PLATFORMS: Final = [Platform.BINARY_SENSOR, Platform.BUTTON, Platform.SELECT]
 

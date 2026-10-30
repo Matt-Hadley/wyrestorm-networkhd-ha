@@ -13,15 +13,23 @@ from typing import Any, Literal
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_PORT, CONF_USERNAME
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryError, HomeAssistantError
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from wyrestorm_networkhd import NHDAPI, NetworkHDClientSSH
+from wyrestorm_networkhd import NHDAPI, HostKeyMismatchError, NetworkHDClientSSH
 from wyrestorm_networkhd.exceptions import AuthenticationError, NetworkHDError
 from wyrestorm_networkhd.models.api_query import DeviceInfo, DeviceStatus, Matrix
 
 from ._utils_coordinator import build_device_collections
-from .const import CONF_UPDATE_INTERVAL, DEFAULT_PORT, DEFAULT_UPDATE_INTERVAL, DOMAIN, SSH_HOST_KEY_POLICY
+from .const import (
+    CONF_HOST_KEY_FINGERPRINT,
+    CONF_UPDATE_INTERVAL,
+    DEFAULT_PORT,
+    DEFAULT_UPDATE_INTERVAL,
+    DOMAIN,
+    SSH_HOST_KEY_POLICY,
+)
 from .models.coordinator import CoordinatorData
 from .models.device_receiver_transmitter import DeviceReceiver, DeviceTransmitter
 
@@ -36,13 +44,15 @@ type WyreStormConfigEntry = ConfigEntry[WyreStormCoordinator]
 
 
 def create_client(data: dict[str, Any]) -> NetworkHDClientSSH:
-    """Create the SSH client from config entry data."""
+    """Create the SSH client from config entry data (pinning the host key when fingerprints are set)."""
+    pinned = {"host_key_fingerprints": fps} if (fps := data.get(CONF_HOST_KEY_FINGERPRINT)) else {}
     return NetworkHDClientSSH(
         host=data[CONF_HOST],
         port=data.get(CONF_PORT, DEFAULT_PORT),
         username=data[CONF_USERNAME],
         password=data[CONF_PASSWORD],
         ssh_host_key_policy=SSH_HOST_KEY_POLICY,
+        **pinned,
     )
 
 
@@ -81,18 +91,28 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
         self._device_status: list[DeviceStatus] = []  # kept for diagnostics
         self._device_info: list[DeviceInfo] = []
         self._device_info_time = -float("inf")
+        self._learned_key = False  # the key was pinned after self.client was built unpinned
 
     async def _async_setup(self) -> None:
         """Connect and subscribe to notifications (runs once before the first refresh)."""
         self.api = NHDAPI(self.client)
         try:
-            await self.client.connect()
+            await self._connect()
         except AuthenticationError as err:
             raise ConfigEntryAuthFailed(f"Controller at {self.host} rejected the credentials") from err
         except API_ERRORS as err:
             raise UpdateFailed(f"Cannot connect to controller at {self.host}: {err}") from err
+        self._subscribe(True)
+
+    def _subscribe(self, subscribe: bool) -> None:
+        """Register (or unregister) the notification callbacks on the current client."""
+        handler = self.client.notification_handler
         for notification_type in NOTIFICATION_TYPES:
-            self.client.notification_handler.register_callback(notification_type, self._on_notification)
+            if subscribe:
+                handler.register_callback(notification_type, self._on_notification)
+            else:
+                with suppress(Exception):
+                    handler.unregister_callback(notification_type, self._on_notification)
 
     def _on_notification(self, notification: Any) -> None:
         """Handle a controller notification by requesting a debounced refresh."""
@@ -107,9 +127,7 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
         """Unsubscribe and disconnect (after any exchange in progress finishes)."""
         await super().async_shutdown()
         async with self._lock:
-            for notification_type in NOTIFICATION_TYPES:
-                with suppress(Exception):
-                    self.client.notification_handler.unregister_callback(notification_type, self._on_notification)
+            self._subscribe(False)
             with suppress(*API_ERRORS):
                 await self.client.disconnect()
 
@@ -117,7 +135,50 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
         """Reconnect if the link dropped (call with `_lock` held)."""
         if not self.client.is_connected():
             _LOGGER.debug("Not connected to %s, reconnecting", self.host)
+            if self._learned_key:
+                await self._replace_client()
+            await self._connect()
+
+    async def _replace_client(self) -> None:
+        """Rebuild the client from the entry data so reconnects use the newly pinned key."""
+        self._subscribe(False)
+        with suppress(*API_ERRORS):
+            await self.client.disconnect()
+        self.client = create_client(dict(self.config_entry.data))
+        self.api = NHDAPI(self.client)
+        self._subscribe(True)
+        self._learned_key = False
+
+    async def _connect(self) -> None:
+        """Connect; pin the host key if none is stored; a key mismatch stops retries and raises a repair issue."""
+        entry = self.config_entry
+        issue_id = f"host_key_mismatch_{entry.entry_id}"
+        try:
             await self.client.connect()
+        except HostKeyMismatchError as err:
+            # The library rejects the key before authenticating, so no credentials were sent.
+            ir.async_create_issue(
+                self.hass,
+                DOMAIN,
+                issue_id,
+                is_fixable=False,
+                severity=ir.IssueSeverity.ERROR,
+                translation_key="host_key_mismatch",
+                translation_placeholders={"host": self.host, "fingerprint": err.presented_fingerprint},
+            )
+            raise ConfigEntryError(
+                translation_domain=DOMAIN,
+                translation_key="host_key_mismatch",
+                translation_placeholders={"host": self.host, "fingerprint": err.presented_fingerprint},
+            ) from err
+        ir.async_delete_issue(self.hass, DOMAIN, issue_id)
+        # Entries from 1.0.x have no pinned key: trust the one presented now (TOFU).
+        if CONF_HOST_KEY_FINGERPRINT not in entry.data and (fingerprint := self.client.host_key_fingerprint):
+            self.hass.config_entries.async_update_entry(
+                entry, data={**entry.data, CONF_HOST_KEY_FINGERPRINT: [fingerprint]}
+            )
+            _LOGGER.info("Pinned the SSH host key of the controller at %s: %s", self.host, fingerprint)
+            self._learned_key = True
 
     async def _async_update_data(self) -> CoordinatorData:
         """Fetch all data, reconnecting first if the link dropped."""
