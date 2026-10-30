@@ -32,6 +32,18 @@
           "password": "SSH password for the controller",
           "port": "SSH port for the controller"
         }
+      },
+      "reauth_confirm": {
+        "title": "Reauthenticate WyreStorm NetworkHD",
+        "description": "The controller at {host} rejected the stored SSH credentials. Enter the current ones.",
+        "data": {
+          "username": "Username",
+          "password": "Password"
+        },
+        "data_description": {
+          "username": "SSH username for the controller",
+          "password": "SSH password for the controller"
+        }
       }
     },
     "error": {
@@ -41,6 +53,7 @@
     },
     "abort": {
       "already_configured": "Device is already configured",
+      "reauth_successful": "Re-authentication was successful",
       "reconfigure_successful": "Re-configuration was successful"
     }
   },
@@ -97,7 +110,7 @@
         },
         "source_device": {
           "name": "Source device",
-          "description": "Transmitter alias or true name. Leave empty to disconnect the receivers."
+          "description": "Transmitter alias or true name. Leave out to disconnect the receivers."
         },
         "target_device": {
           "name": "Target devices",

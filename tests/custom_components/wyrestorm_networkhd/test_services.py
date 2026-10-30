@@ -79,6 +79,24 @@ async def test_schema_rejects_bad_power_state(hass: HomeAssistant, setup_integra
         )
 
 
+@pytest.mark.parametrize(
+    ("service", "data"),
+    [
+        (SERVICE_MATRIX_SET, {"source_device": "Source1", "target_device": []}),
+        (SERVICE_MATRIX_SET, {"source_device": "", "target_device": "Display1"}),
+        (SERVICE_MATRIX_SET, {"source_device": None, "target_device": "Display1"}),
+        (SERVICE_POWER_CONTROL, {"devices": [], "power_state": "on"}),
+    ],
+)
+async def test_schema_rejects_empty_names(
+    hass: HomeAssistant, setup_integration: MockConfigEntry, mock_client: MagicMock, service: str, data: dict
+) -> None:
+    """Empty device lists and an empty source are rejected instead of silently disconnecting."""
+    with pytest.raises(vol.Invalid):
+        await hass.services.async_call(DOMAIN, service, data, blocking=True)
+    mock_client.api.media_stream_matrix_switch.matrix_set_null.assert_not_awaited()
+
+
 async def test_command_failure(hass: HomeAssistant, setup_integration: MockConfigEntry, mock_client: MagicMock) -> None:
     """A controller error raises a translated HomeAssistantError."""
     mock_client.api.media_stream_matrix_switch.matrix_set.side_effect = ResponseError("no mirror")

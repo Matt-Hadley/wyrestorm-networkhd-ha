@@ -13,22 +13,21 @@ from typing import Any, Literal
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_PORT, CONF_USERNAME
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from wyrestorm_networkhd import NHDAPI, NetworkHDClientSSH
-from wyrestorm_networkhd.exceptions import NetworkHDError
-from wyrestorm_networkhd.models.api_query import DeviceInfo
+from wyrestorm_networkhd.exceptions import AuthenticationError, NetworkHDError
+from wyrestorm_networkhd.models.api_query import DeviceInfo, DeviceStatus, Matrix
 
-from ._utils_coordinator import build_device_collections, process_matrix_assignments
+from ._utils_coordinator import build_device_collections
 from .const import CONF_UPDATE_INTERVAL, DEFAULT_PORT, DEFAULT_UPDATE_INTERVAL, DOMAIN, SSH_HOST_KEY_POLICY
 from .models.coordinator import CoordinatorData
-from .models.device_controller import DeviceController
 from .models.device_receiver_transmitter import DeviceReceiver, DeviceTransmitter
 
 _LOGGER = logging.getLogger(__name__)
 
-# Library 2.x raises NetworkHDError/builtins and plain ValueError from parsers; 3.x subclasses these.
+# Library errors subclass NetworkHDError; OSError/ValueError catch anything the transport or parsers raise raw.
 API_ERRORS = (NetworkHDError, OSError, ValueError)
 NOTIFICATION_TYPES = ("endpoint", "video")
 DEVICE_INFO_TTL = 600  # seconds; device info (MAC, firmware, network) rarely changes
@@ -47,6 +46,11 @@ def create_client(data: dict[str, Any]) -> NetworkHDClientSSH:
     )
 
 
+def _assignments(matrix: Matrix) -> dict[str, str | None]:
+    """Map receiver alias -> routed transmitter alias (None when disconnected)."""
+    return {a.rx: a.tx for a in matrix.assignments}
+
+
 class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
     """Owns the controller connection and all API calls.
 
@@ -55,6 +59,7 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
     """
 
     config_entry: WyreStormConfigEntry
+    data: CoordinatorData
 
     def __init__(self, hass: HomeAssistant, entry: WyreStormConfigEntry) -> None:
         """Initialize coordinator."""
@@ -73,15 +78,17 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
         self.api: NHDAPI
         self.controller_device_id: str | None = None  # device registry id, set in async_setup_entry
         self._lock = asyncio.Lock()  # one command/response exchange at a time
+        self._device_status: list[DeviceStatus] = []  # kept for diagnostics
         self._device_info: list[DeviceInfo] = []
         self._device_info_time = -float("inf")
 
     async def _async_setup(self) -> None:
         """Connect and subscribe to notifications (runs once before the first refresh)."""
-        # NHDAPI 2.x discovers command modules with blocking imports, so build it off the loop.
-        self.api = await self.hass.async_add_executor_job(NHDAPI, self.client)
+        self.api = NHDAPI(self.client)
         try:
             await self.client.connect()
+        except AuthenticationError as err:
+            raise ConfigEntryAuthFailed(f"Controller at {self.host} rejected the credentials") from err
         except API_ERRORS as err:
             raise UpdateFailed(f"Cannot connect to controller at {self.host}: {err}") from err
         for notification_type in NOTIFICATION_TYPES:
@@ -97,22 +104,29 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
         )
 
     async def async_shutdown(self) -> None:
-        """Unsubscribe and disconnect."""
+        """Unsubscribe and disconnect (after any exchange in progress finishes)."""
         await super().async_shutdown()
-        for notification_type in NOTIFICATION_TYPES:
-            with suppress(Exception):
-                self.client.notification_handler.unregister_callback(notification_type, self._on_notification)
-        with suppress(*API_ERRORS):
-            await self.client.disconnect()
+        async with self._lock:
+            for notification_type in NOTIFICATION_TYPES:
+                with suppress(Exception):
+                    self.client.notification_handler.unregister_callback(notification_type, self._on_notification)
+            with suppress(*API_ERRORS):
+                await self.client.disconnect()
+
+    async def _ensure_connected(self) -> None:
+        """Reconnect if the link dropped (call with `_lock` held)."""
+        if not self.client.is_connected():
+            _LOGGER.debug("Not connected to %s, reconnecting", self.host)
+            await self.client.connect()
 
     async def _async_update_data(self) -> CoordinatorData:
         """Fetch all data, reconnecting first if the link dropped."""
         async with self._lock:
             try:
-                if not self.client.is_connected():
-                    _LOGGER.debug("Not connected to %s, reconnecting", self.host)
-                    await self.client.connect()
+                await self._ensure_connected()
                 return await self._fetch()
+            except AuthenticationError as err:
+                raise ConfigEntryAuthFailed(f"Controller at {self.host} rejected the credentials") from err
             except API_ERRORS as err:
                 # Drop the link so the next update starts from a clean connection.
                 with suppress(*API_ERRORS):
@@ -122,22 +136,21 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
     async def _fetch(self) -> CoordinatorData:
         query = self.api.api_query
         version = await query.config_get_version()
-        ip_settings = await query.config_get_ipsetting()
         device_json_list = await query.config_get_devicejsonstring()
-        device_status_list = await query.config_get_device_status()
+        self._device_status = await query.config_get_device_status()
         if time.monotonic() - self._device_info_time > DEVICE_INFO_TTL:
             self._device_info = await query.config_get_device_info()
             self._device_info_time = time.monotonic()
         matrix = await query.matrix_get()
 
         transmitters, receivers = build_device_collections(
-            device_json_list or [], device_status_list or [], self._device_info or []
+            device_json_list or [], self._device_status or [], self._device_info or []
         )
         return CoordinatorData(
-            device_controller=DeviceController.from_wyrestorm_models(version, ip_settings),
+            version=version,
             device_transmitters=transmitters,
             device_receivers=receivers,
-            matrix_assignments=process_matrix_assignments(matrix),
+            matrix_assignments=_assignments(matrix),
             last_update=datetime.now(),
         )
 
@@ -159,24 +172,36 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
     # Commands
     async def async_set_matrix(self, source: DeviceTransmitter | None, receivers: list[DeviceReceiver]) -> None:
-        """Route `source` to `receivers` (None disconnects them), then refresh the matrix."""
+        """Route `source` to `receivers` (None disconnects them), then re-read the matrix."""
         rx = [r.alias_name for r in receivers]
         switch = self.api.media_stream_matrix_switch
         async with self._lock:
             try:
+                await self._ensure_connected()
                 if source is None:
                     await switch.matrix_set_null(rx)
                 else:
                     await switch.matrix_set(source.alias_name, rx)
-                matrix = await self.api.api_query.matrix_get()
             except API_ERRORS as err:
                 raise self._command_failed(err) from err
-            self.async_set_updated_data(replace(self.data, matrix_assignments=process_matrix_assignments(matrix)))
+            try:
+                matrix = await self.api.api_query.matrix_get()
+            except API_ERRORS as err:
+                # The switch succeeded; only the read-back failed, so let a full refresh catch up.
+                _LOGGER.debug("Matrix read-back from %s failed: %s", self.host, err)
+                self.config_entry.async_create_background_task(
+                    self.hass, self.async_request_refresh(), f"{DOMAIN} matrix refresh"
+                )
+                return
+        # Not async_set_updated_data: that would cancel a pending debounced refresh and reset the poll timer.
+        self.data = replace(self.data, matrix_assignments=_assignments(matrix))
+        self.async_update_listeners()
 
     async def async_set_power(self, receivers: list[DeviceReceiver], power_state: Literal["on", "off"]) -> None:
         """Send display power on/off to the displays attached to `receivers` (no refresh needed)."""
         async with self._lock:
             try:
+                await self._ensure_connected()
                 await self.api.connected_device_control.config_set_device_sinkpower(
                     power=power_state, rx=[r.alias_name for r in receivers]
                 )
@@ -184,11 +209,13 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 raise self._command_failed(err) from err
 
     async def async_reboot(self) -> None:
-        """Reboot the controller; the next update reconnects once it is back."""
+        """Reboot the controller; entities are unavailable until an update reconnects once it is back."""
         async with self._lock:
             try:
+                await self._ensure_connected()
                 await self.api.reboot_reset.set_reboot()
             except API_ERRORS as err:
                 raise self._command_failed(err) from err
             with suppress(*API_ERRORS):
                 await self.client.disconnect()
+        self.async_set_update_error(UpdateFailed(f"Controller at {self.host} is rebooting"))

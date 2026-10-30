@@ -23,12 +23,12 @@ async def async_setup_entry(
     """Set up WyreStorm NetworkHD binary sensors."""
     coordinator = entry.runtime_data
     entities: list[BinarySensorEntity] = []
-    for tx in coordinator.data.get_transmitters_list():
+    for tx in coordinator.data.device_transmitters.values():
         entities += [
             WyreStormControllerLinkSensor(coordinator, tx, "controller_link"),
             WyreStormVideoInputSensor(coordinator, tx, "video_input"),
         ]
-    for rx in coordinator.data.get_receivers_list():
+    for rx in coordinator.data.device_receivers.values():
         entities += [
             WyreStormControllerLinkSensor(coordinator, rx, "controller_link"),
             WyreStormVideoOutputSensor(coordinator, rx, "video_output"),

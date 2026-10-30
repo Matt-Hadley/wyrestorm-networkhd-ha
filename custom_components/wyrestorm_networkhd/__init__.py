@@ -35,7 +35,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: WyreStormConfigEntry) ->
         name=f"WyreStorm NetworkHD ({host})",
         manufacturer="WyreStorm",
         model="NetworkHD Controller",
-        sw_version=coordinator.data.device_controller.core_version,
+        sw_version=coordinator.data.version.core_version,
         configuration_url=f"http://{host}",
     )
     coordinator.controller_device_id = controller.id

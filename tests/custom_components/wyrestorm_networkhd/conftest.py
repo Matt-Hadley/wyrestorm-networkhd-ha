@@ -16,7 +16,7 @@ import pytest
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_PORT, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
-from wyrestorm_networkhd.models.api_query import DeviceInfo, DeviceJsonString, DeviceStatus, IpSetting, Matrix, Version
+from wyrestorm_networkhd.models.api_query import DeviceInfo, DeviceJsonString, DeviceStatus, Matrix, Version
 
 from custom_components.wyrestorm_networkhd.const import DOMAIN
 
@@ -29,7 +29,6 @@ def parsed_responses(raw: dict[str, str] = RAW) -> dict[str, Any]:
     """Return api_query method name -> parsed library model."""
     return {
         "config_get_version": Version.parse(raw["config get version"]),
-        "config_get_ipsetting": IpSetting.parse(raw["config get ipsetting"]),
         "config_get_devicejsonstring": DeviceJsonString.parse(raw["config get devicejsonstring"]),
         "config_get_device_status": DeviceStatus.parse(raw["config get device status"]),
         "config_get_device_info": DeviceInfo.parse(raw["config get device info"]),

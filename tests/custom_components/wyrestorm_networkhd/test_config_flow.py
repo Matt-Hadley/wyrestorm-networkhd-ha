@@ -135,3 +135,24 @@ async def test_options_flow(hass: HomeAssistant, setup_integration: MockConfigEn
     assert entry.options == {CONF_UPDATE_INTERVAL: 120}
     assert entry.data == ENTRY_DATA
     assert entry.runtime_data.update_interval.total_seconds() == 120
+
+
+async def test_reauth(hass: HomeAssistant, setup_integration: MockConfigEntry, mock_client: MagicMock) -> None:
+    """Reauth shows invalid_auth for wrong credentials, then saves the new ones and reloads."""
+    entry = setup_integration
+    result = await entry.start_reauth_flow(hass)
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "reauth_confirm"
+
+    mock_client.connect.side_effect = AuthenticationError("wyrestorm", HOST)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"username": "wyrestorm", "password": "wrong"}
+    )
+    assert result["errors"] == {"base": "invalid_auth"}
+
+    mock_client.connect.side_effect = None
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {"username": "admin", "password": "new"})
+    await hass.async_block_till_done()
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reauth_successful"
+    assert entry.data == {**ENTRY_DATA, "username": "admin", "password": "new"}

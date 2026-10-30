@@ -27,7 +27,7 @@ async def async_setup_entry(
     """Set up WyreStorm NetworkHD button entities."""
     coordinator = entry.runtime_data
     entities: list[ButtonEntity] = [WyreStormControllerRebootButton(coordinator)]
-    for rx in coordinator.data.get_receivers_list():
+    for rx in coordinator.data.device_receivers.values():
         entities += [
             WyreStormDisplayPowerButton(coordinator, rx, "on"),
             WyreStormDisplayPowerButton(coordinator, rx, "off"),

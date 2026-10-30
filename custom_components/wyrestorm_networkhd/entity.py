@@ -26,8 +26,8 @@ class WyreStormEndpointEntity(CoordinatorEntity[WyreStormCoordinator]):
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, device.true_name)},
             name=device.get_device_display_name(),
-            manufacturer=device.manufacturer,
-            model=device.model,
+            manufacturer="WyreStorm",
+            model=device.true_name,
             sw_version=device.version,
             via_device_id=coordinator.controller_device_id,
         )
