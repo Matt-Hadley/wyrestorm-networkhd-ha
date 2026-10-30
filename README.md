@@ -64,13 +64,6 @@ confirm it; it is then pinned (see [Security](#security)).
 
 Each controller can be added once (its host identifies it).
 
-### Options
-
-**Configure** on the integration entry has one option:
-
-- **Update interval (seconds)**: fallback polling interval, 10 to 300, default 60. The integration reloads when you
-  change it.
-
 ### Reconfigure
 
 **Reconfigure** on the integration entry changes the host, username, password, port and SSH host key fingerprint. The
@@ -123,8 +116,8 @@ The examples below use a controller at `192.168.1.50`, a transmitter with alias 
   next update, and a service call or button press also reconnects first.
 - After **Reboot controller**, all entities are unavailable until the controller is back and the next update succeeds.
 - If an endpoint is offline, its **Controller link** sensor shows off and its other entities are unavailable.
-- The controller pushes endpoint online/offline and video found/lost notifications, which trigger a refresh. Polling at
-  the update interval is a fallback.
+- The controller pushes endpoint online/offline and video found/lost notifications, which trigger a refresh. Polling every
+  60 seconds is a fallback.
 
 ## Services
 

@@ -13,7 +13,7 @@ This is a Home Assistant integration for WyreStorm NetworkHD matrix switching sy
 - Catch `API_ERRORS` (`NetworkHDError`, `OSError`, `ValueError`), never match exception message strings. Commands raise `HomeAssistantError(translation_key="command_failed")`.
 
 ### Refresh Rules
-1. **Polling** is a fallback (`update_interval` option, default 60 s); `iot_class` is `local_push`.
+1. **Polling** is a fixed 60 s fallback (`DEFAULT_UPDATE_INTERVAL`; core does not allow a polling interval field, see the appropriate-polling rule); `iot_class` is `local_push`.
 2. **Notifications** (endpoint online/offline, video found/lost) call `async_request_refresh()` via a background task; HA's debouncer collapses bursts.
 3. **Matrix changes** (`async_set_matrix`) re-read only `matrix get`.
 4. **Display power**: no refresh (it does not change device status).
@@ -55,7 +55,7 @@ custom_components/wyrestorm_networkhd/
 ├── coordinator.py           # Connection, polling, notifications, commands
 ├── services.py              # matrix_set / power_control
 ├── entity.py                # Base entity for endpoint devices
-├── config_flow.py           # User, reconfigure, reauth and options flows
+├── config_flow.py           # User, zeroconf, reconfigure and reauth flows
 ├── diagnostics.py           # Redacted diagnostics
 ├── const.py                 # Constants
 ├── services.yaml, strings.json, translations/en.json, icons.json

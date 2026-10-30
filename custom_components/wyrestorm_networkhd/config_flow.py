@@ -10,13 +10,11 @@ from typing import Any
 import voluptuous as vol
 from homeassistant.config_entries import (
     SOURCE_RECONFIGURE,
-    ConfigEntry,
     ConfigFlow,
     ConfigFlowResult,
-    OptionsFlowWithReload,
 )
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_PORT, CONF_USERNAME, Platform
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers import (
     device_registry as dr,
     entity_registry as er,
@@ -28,10 +26,8 @@ from wyrestorm_networkhd.exceptions import AuthenticationError
 
 from .const import (
     CONF_HOST_KEY_FINGERPRINT,
-    CONF_UPDATE_INTERVAL,
     DEFAULT_PASSWORD,
     DEFAULT_PORT,
-    DEFAULT_UPDATE_INTERVAL,
     DEFAULT_USERNAME,
     DOMAIN,
 )
@@ -99,12 +95,6 @@ class WyreStormConfigFlow(ConfigFlow, domain=DOMAIN):
         self._pending: dict[str, Any] = {}  # validated data waiting for confirm_host_key
         self._placeholders: dict[str, str] = {"fingerprint": "-"}  # presented fingerprint, shown in errors
         self._presented: str | None = None  # fingerprint presented by the last successful connection test
-
-    @staticmethod
-    @callback
-    def async_get_options_flow(config_entry: ConfigEntry) -> WyreStormOptionsFlow:
-        """Create the options flow."""
-        return WyreStormOptionsFlow()
 
     async def _async_try_connect(self, data: dict[str, Any]) -> dict[str, str]:
         """Return form errors for `data` (empty if the controller answered); learns the presented key."""
@@ -215,21 +205,3 @@ class WyreStormConfigFlow(ConfigFlow, domain=DOMAIN):
         ent_reg = er.async_get(self.hass)
         if entity_id := ent_reg.async_get_entity_id(Platform.BUTTON, DOMAIN, f"{DOMAIN}_{old_host}_controller_reboot"):
             ent_reg.async_update_entity(entity_id, new_unique_id=f"{DOMAIN}_{new_host}_controller_reboot")
-
-
-class WyreStormOptionsFlow(OptionsFlowWithReload):
-    """Edit the polling interval."""
-
-    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        """Manage the options."""
-        if user_input is not None:
-            return self.async_create_entry(data=user_input)
-
-        entry = self.config_entry
-        current = entry.options.get(CONF_UPDATE_INTERVAL, entry.data.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL))
-        return self.async_show_form(
-            step_id="init",
-            data_schema=vol.Schema(
-                {vol.Required(CONF_UPDATE_INTERVAL, default=current): vol.All(int, vol.Range(min=10, max=300))}
-            ),
-        )

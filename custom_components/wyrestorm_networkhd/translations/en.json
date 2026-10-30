@@ -67,19 +67,6 @@
       "reconfigure_successful": "Re-configuration was successful"
     }
   },
-  "options": {
-    "step": {
-      "init": {
-        "title": "WyreStorm NetworkHD Options",
-        "data": {
-          "update_interval": "Update interval (seconds)"
-        },
-        "data_description": {
-          "update_interval": "Fallback polling interval (10-300 seconds); changes are also pushed by the controller"
-        }
-      }
-    }
-  },
   "entity": {
     "binary_sensor": {
       "controller_link": { "name": "Controller link" },

@@ -18,7 +18,7 @@ from wyrestorm_networkhd.exceptions import (
     ConnectionError as NHDConnectionError,
 )
 
-from custom_components.wyrestorm_networkhd.const import CONF_HOST_KEY_FINGERPRINT, CONF_UPDATE_INTERVAL, DOMAIN
+from custom_components.wyrestorm_networkhd.const import CONF_HOST_KEY_FINGERPRINT, DOMAIN
 
 from .conftest import ENTRY_DATA, FINGERPRINT, HOST, OTHER_FINGERPRINT, PINNED_DATA
 
@@ -192,20 +192,6 @@ async def test_reconfigure_host_collision(hass: HomeAssistant, setup_integration
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "already_configured"
     assert setup_integration.data[CONF_HOST] == HOST
-
-
-async def test_options_flow(hass: HomeAssistant, setup_integration: MockConfigEntry) -> None:
-    """Options only edit the update interval, and the entry reloads with it."""
-    entry = setup_integration
-    result = await hass.config_entries.options.async_init(entry.entry_id)
-    assert result["type"] is FlowResultType.FORM
-    result = await hass.config_entries.options.async_configure(result["flow_id"], {CONF_UPDATE_INTERVAL: 120})
-    await hass.async_block_till_done()
-
-    assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert entry.options == {CONF_UPDATE_INTERVAL: 120}
-    assert entry.data == PINNED_DATA
-    assert entry.runtime_data.update_interval.total_seconds() == 120
 
 
 async def test_reauth(hass: HomeAssistant, setup_integration: MockConfigEntry, mock_client: MagicMock) -> None:

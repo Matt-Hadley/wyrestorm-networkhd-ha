@@ -24,7 +24,6 @@ from wyrestorm_networkhd.models.api_query import DeviceInfo, DeviceStatus, Matri
 from ._utils_coordinator import build_device_collections
 from .const import (
     CONF_HOST_KEY_FINGERPRINT,
-    CONF_UPDATE_INTERVAL,
     DEFAULT_PORT,
     DEFAULT_UPDATE_INTERVAL,
     DOMAIN,
@@ -73,15 +72,12 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
     def __init__(self, hass: HomeAssistant, entry: WyreStormConfigEntry) -> None:
         """Initialize coordinator."""
-        interval = entry.options.get(
-            CONF_UPDATE_INTERVAL, entry.data.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
-        )
         super().__init__(
             hass,
             _LOGGER,
             config_entry=entry,
             name="WyreStorm NetworkHD",
-            update_interval=timedelta(seconds=interval),
+            update_interval=timedelta(seconds=DEFAULT_UPDATE_INTERVAL),
         )
         self.host: str = entry.data[CONF_HOST]
         self.client = create_client(dict(entry.data))

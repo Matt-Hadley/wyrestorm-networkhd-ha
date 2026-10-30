@@ -6,7 +6,6 @@ from homeassistant.const import Platform
 
 DOMAIN: Final = "wyrestorm_networkhd"
 
-CONF_UPDATE_INTERVAL: Final = "update_interval"  # Polling frequency in seconds (entry option)
 CONF_HOST_KEY_FINGERPRINT: Final = "host_key_fingerprint"  # Pinned SSH host key fingerprint(s), list in entry data
 
 # Default connection values
