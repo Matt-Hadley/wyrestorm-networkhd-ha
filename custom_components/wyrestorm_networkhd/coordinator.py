@@ -220,7 +220,7 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 self._missing[device.id] = missing
             else:
                 _LOGGER.info("Removing device %s: the controller at %s no longer reports it", device.name, self.host)
-                dev_reg.async_update_device(device.id, remove_config_entry_id=self.config_entry.entry_id)
+                dev_reg.async_remove_device(device.id)  # since HA 2026 a device belongs to one entry only
                 del self._missing[device.id]
 
     async def _fetch(self) -> CoordinatorData:
