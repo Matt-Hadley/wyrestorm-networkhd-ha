@@ -37,7 +37,7 @@ runs:
         print(config['project']['requires-python'].replace('>=', ''))
         ")
         echo "python-version=$PYTHON_VERSION" >> $GITHUB_OUTPUT
-        
+
         # Read integration name from manifest
         INTEGRATION_NAME=$(python -c "
         import json
@@ -46,7 +46,7 @@ runs:
         print(manifest['domain'])
         ")
         echo "integration-name=$INTEGRATION_NAME" >> $GITHUB_OUTPUT
-        
+
         # Read package name from pyproject.toml
         PACKAGE_NAME=$(python -c "
         import tomllib

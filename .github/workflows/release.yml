@@ -34,7 +34,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           release-type: python
           include-component-in-tag: false
-          
+
       - name: Debug Release Please outputs
         run: |
           echo "Releases created: '${{ steps.release.outputs.releases_created }}'"
@@ -131,7 +131,7 @@ jobs:
       - name: Update version in manifest.json
         run: |
           VERSION="${{ needs.release-please.outputs.version }}"
-          
+
           # Update manifest.json
           jq --arg version "$VERSION" '.version = $version' \
             custom_components/wyrestorm_networkhd/manifest.json > manifest.tmp
@@ -149,7 +149,7 @@ jobs:
             -x "._*" \
             -x "*_version.py"
           cd ../..
-          
+
           # Also create a full bundle
           zip -r wyrestorm-networkhd-ha.zip \
             custom_components/wyrestorm_networkhd/ \
@@ -178,4 +178,3 @@ jobs:
         uses: actions/attest-build-provenance@v4
         with:
           subject-path: "*.zip"
-

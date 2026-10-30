@@ -7,16 +7,16 @@
 
 A Home Assistant custom integration for [WyreStorm](https://www.wyrestorm.com) NetworkHD AV-over-IP systems. NetworkHD
 sends HDMI video over a network: transmitters (encoders) sit next to the sources, receivers (decoders) next to the
-displays, and a controller manages which source each display shows. The integration connects to the NetworkHD
-controller over SSH and lets you route transmitters to receivers, switch the displays attached to receivers on and off,
-and see whether each endpoint is online and passing video.
+displays, and a controller manages which source each display shows. The integration connects to the NetworkHD controller
+over SSH and lets you route transmitters to receivers, switch the displays attached to receivers on and off, and see
+whether each endpoint is online and passing video.
 
 It is built on the [wyrestorm-networkhd](https://github.com/Matt-Hadley/wyrestorm-networkhd-py) Python library.
 
 ## Use cases
 
-- Switch the source of every display from a Home Assistant dashboard, a voice assistant or a scene ("Movie night":
-  the media player on the living room TV, the game console on the den TV).
+- Switch the source of every display from a Home Assistant dashboard, a voice assistant or a scene ("Movie night": the
+  media player on the living room TV, the game console on the den TV).
 - Follow what is happening: route a camera or doorbell feed to the kitchen display when someone rings, then switch back.
 - Turn displays on and off with the rest of the house: off when everyone leaves or at night, on when a source starts
   sending video.
@@ -65,13 +65,13 @@ Home Assistant discovers NetworkHD controllers on its own network (see [Discover
 appears under **Settings > Devices & services**; select **Add** and enter the SSH details below (without the host).
 Otherwise go to **Settings > Devices & services > Add integration** and search for **WyreStorm NetworkHD**.
 
-| Field    | Default     | Notes                                    |
-| -------- | ----------- | ---------------------------------------- |
-| Host     |             | IP address or hostname of the controller. Find it in your router's list of clients (a host named `NHD-000-CTL-...`). Give the controller a fixed address (DHCP reservation) if you can |
-| Username | `wyrestorm` | Controller SSH username; the factory default unless you changed it on the controller |
-| Password | `networkhd` | Controller SSH password; the factory default unless you changed it on the controller |
-| Port     | `10022`     | The controller's SSH API port |
-| SSH host key fingerprint (optional) | | Pin the controller's key before the first connect (see [Security](#security)) |
+| Field                               | Default     | Notes                                                                                                                                                                                  |
+| ----------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Host                                |             | IP address or hostname of the controller. Find it in your router's list of clients (a host named `NHD-000-CTL-...`). Give the controller a fixed address (DHCP reservation) if you can |
+| Username                            | `wyrestorm` | Controller SSH username; the factory default unless you changed it on the controller                                                                                                   |
+| Password                            | `networkhd` | Controller SSH password; the factory default unless you changed it on the controller                                                                                                   |
+| Port                                | `10022`     | The controller's SSH API port                                                                                                                                                          |
+| SSH host key fingerprint (optional) |             | Pin the controller's key before the first connect (see [Security](#security))                                                                                                          |
 
 The integration connects and queries the controller's version before creating the entry. If that fails you see one of:
 
@@ -85,16 +85,16 @@ The integration connects and queries the controller's version before creating th
 If you leave the fingerprint empty, the integration shows the SSH host key the controller presented and asks you to
 confirm it; it is then pinned (see [Security](#security)).
 
-Each controller can be added once. It is identified by its MAC address, which the controller announces over mDNS
-(the SSH API does not report it); a controller that does not answer mDNS is identified by its host until it does.
+Each controller can be added once. It is identified by its MAC address, which the controller announces over mDNS (the
+SSH API does not report it); a controller that does not answer mDNS is identified by its host until it does.
 
 ### Reconfigure
 
 **Reconfigure** on the integration entry changes the host, username, password, port and SSH host key fingerprint. The
 new details are tested before they are saved. Changing the host keeps the same controller device and its entities; if
 the new host announces a different MAC address, it is another controller and reconfigure stops with "different
-controller". The fingerprint field is pre-filled with the pinned key: edit it to pin another key, or clear it to confirm the key the
-controller presents now.
+controller". The fingerprint field is pre-filled with the pinned key: edit it to pin another key, or clear it to confirm
+the key the controller presents now.
 
 ### Discovery
 
@@ -103,9 +103,9 @@ Assistant's zeroconf discovery picks that up and offers to add the controller. D
 gets a new IP address: the entry is updated to the new address and reloaded. Only the address changes; the pinned SSH
 host key still has to match, so a different device at that address is refused (see [Security](#security)).
 
-mDNS is multicast and does not cross VLANs or subnets unless your network reflects it; add the controller by host
-then. To learn the MAC of a controller added by host, the integration asks the controller directly (unicast mDNS to
-port 5353) at every startup until it answers; that also works across subnets if UDP port 5353 is allowed.
+mDNS is multicast and does not cross VLANs or subnets unless your network reflects it; add the controller by host then.
+To learn the MAC of a controller added by host, the integration asks the controller directly (unicast mDNS to port 5353)
+at every startup until it answers; that also works across subnets if UDP port 5353 is allowed.
 
 ### Reauthenticate
 
@@ -130,8 +130,8 @@ The examples below use a controller at `192.0.2.10`, a transmitter with alias `S
 
 ### Controller: `WyreStorm NetworkHD (<host>)`
 
-| Entity            | Example entity ID                                           | Notes                                                       |
-| ----------------- | ----------------------------------------------------------- | ----------------------------------------------------------- |
+| Entity            | Example entity ID                                         | Notes                                                                      |
+| ----------------- | --------------------------------------------------------- | -------------------------------------------------------------------------- |
 | Reboot controller | `button.wyrestorm_networkhd_192_0_2_10_reboot_controller` | Configuration. Reboots the controller; the integration reconnects after it |
 
 ### Transmitter: `Transmitter - <alias>`
@@ -154,15 +154,14 @@ The examples below use a controller at `192.0.2.10`, a transmitter with alias `S
 ### Availability
 
 - If the controller cannot be reached, all entities become unavailable. The integration reconnects automatically on the
-  next update, and a service call or button press also reconnects first. The loss and the recovery are each logged
-  once.
+  next update, and a service call or button press also reconnects first. The loss and the recovery are each logged once.
 - After **Reboot controller**, all entities are unavailable until the controller is back and the next update succeeds.
 - If an endpoint is offline, its **Controller link** sensor shows off and its other entities are unavailable.
 
 ## Data updates
 
-The controller pushes a notification when an endpoint goes online or offline and when a transmitter or receiver finds
-or loses video; each one triggers a refresh (bursts are collapsed into one refresh, at most every 10 seconds). The
+The controller pushes a notification when an endpoint goes online or offline and when a transmitter or receiver finds or
+loses video; each one triggers a refresh (bursts are collapsed into one refresh, at most every 10 seconds). The
 integration also polls the controller every 60 seconds as a fallback. A refresh sends four commands over the one SSH
 connection (the device info, with MAC addresses and firmware versions, is re-read only every 10 minutes or after an
 endpoint notification). Changing a receiver's source re-reads only the routing; display power commands do not refresh,
@@ -289,9 +288,9 @@ the raw device status and info, with the host, username, password, IP addresses,
 ## Security
 
 The integration pins the controller's SSH host key (trust on first use): when you add the controller it shows the key
-the controller presented and asks you to confirm it, and from then on it refuses to connect, before sending the
-username and password, if the controller presents a different key. Entries set up with 1.0.x pin the key presented on
-their first connection after upgrading (logged once at INFO).
+the controller presented and asks you to confirm it, and from then on it refuses to connect, before sending the username
+and password, if the controller presents a different key. Entries set up with 1.0.x pin the key presented on their first
+connection after upgrading (logged once at INFO).
 
 To pin the key before the first connection instead, enter its fingerprint in the **SSH host key fingerprint** field. Get
 it from a machine you trust on the same network:
@@ -312,10 +311,10 @@ answering at the controller's address. Diagnostics show whether a key is pinned 
 
 ## Known limitations
 
-- Only video routing and display power are exposed. Audio, USB, IR and serial routing, video walls and multiview
-  layouts are not.
-- Display power buttons send a command; the controller does not report whether the display is on, so there is no
-  power state.
+- Only video routing and display power are exposed. Audio, USB, IR and serial routing, video walls and multiview layouts
+  are not.
+- Display power buttons send a command; the controller does not report whether the display is on, so there is no power
+  state.
 - Aliases with spaces cannot be used (see [Devices and entities](#devices-and-entities)).
 - Only SSH is supported, not Telnet.
 - Discovery needs mDNS from the controller to reach Home Assistant, which usually means the same VLAN or subnet.
@@ -353,18 +352,18 @@ control is set up for that receiver on the controller and that the display suppo
 
 ### The controller is not discovered
 
-mDNS does not reach Home Assistant, usually because the controller is on another VLAN or subnet. Add it by host
-instead, or enable an mDNS reflector on your router.
+mDNS does not reach Home Assistant, usually because the controller is on another VLAN or subnet. Add it by host instead,
+or enable an mDNS reflector on your router.
 
 ### The controller keeps an IP-based identity
 
 The integration learns the controller's MAC by asking it over unicast mDNS (UDP port 5353) at every startup. If a
-firewall blocks that port between Home Assistant and the controller, the entry stays identified by its host, which
-still works but means discovery cannot follow an address change. Allow UDP 5353 from Home Assistant to the controller
-and restart, or give the controller a fixed address.
+firewall blocks that port between Home Assistant and the controller, the entry stays identified by its host, which still
+works but means discovery cannot follow an address change. Allow UDP 5353 from Home Assistant to the controller and
+restart, or give the controller a fixed address.
 
-If such a controller changes IP address, discovery may offer it as a new controller. Do not accept it (that would
-add the controller twice); use **Reconfigure** on the existing entry to enter the new address instead.
+If such a controller changes IP address, discovery may offer it as a new controller. Do not accept it (that would add
+the controller twice); use **Reconfigure** on the existing entry to enter the new address instead.
 
 To enable debug logging, add this to `configuration.yaml` and restart:
 
