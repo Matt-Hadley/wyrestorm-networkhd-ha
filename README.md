@@ -69,6 +69,12 @@ Each controller can be added once (its host identifies it).
 **Reconfigure** on the integration entry changes the host, username, password and port. The new details are tested
 before they are saved. Changing the host keeps the same controller device and its entities.
 
+### Reauthenticate
+
+If the controller rejects the stored username or password (for example after it was changed on the controller), the
+integration stops retrying and Home Assistant shows a **Reauthenticate** prompt for the entry. Enter the current
+credentials; they are tested before they are saved.
+
 ## Devices and entities
 
 The integration creates one device for the controller and one for each transmitter and receiver. Endpoint devices are
@@ -76,8 +82,8 @@ named `Transmitter - <alias>` and `Receiver - <alias>`, using the alias set on t
 address or true name when it has no alias). Entity IDs are built from the device name and the entity name when the
 entity is first added.
 
-The examples below use a controller at `192.168.1.50`, a transmitter with alias `Apple TV` and a receiver with alias
-`Living Room TV`.
+The examples below use a controller at `192.168.1.50`, a transmitter with alias `Source1` and a receiver with alias
+`Display1`. Aliases must not contain spaces: the controller's commands separate names with spaces.
 
 ### Controller: `WyreStorm NetworkHD (<host>)`
 
@@ -87,25 +93,26 @@ The examples below use a controller at `192.168.1.50`, a transmitter with alias 
 
 ### Transmitter: `Transmitter - <alias>`
 
-| Entity          | Example entity ID                                    | Notes                                                                                                                                  |
-| --------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| Controller link | `binary_sensor.transmitter_apple_tv_controller_link` | Connectivity (diagnostic). On while the endpoint is online. Attributes: `device_type`, `ip_address`, `mac_address`, `firmware_version` |
-| Video input     | `binary_sensor.transmitter_apple_tv_video_input`     | On while the HDMI input frame rate is above 0. Attribute: `hdmi_in_frame_rate`                                                         |
+| Entity          | Example entity ID                                   | Notes                                                                                                                                  |
+| --------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Controller link | `binary_sensor.transmitter_source1_controller_link` | Connectivity (diagnostic). On while the endpoint is online. Attributes: `device_type`, `ip_address`, `mac_address`, `firmware_version` |
+| Video input     | `binary_sensor.transmitter_source1_video_input`     | On while the HDMI input frame rate is above 0. Attribute: `hdmi_in_frame_rate`                                                         |
 
 ### Receiver: `Receiver - <alias>`
 
-| Entity            | Example entity ID                                       | Notes                                                                            |
-| ----------------- | ------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| Controller link   | `binary_sensor.receiver_living_room_tv_controller_link` | As for transmitters                                                              |
-| Video output      | `binary_sensor.receiver_living_room_tv_video_output`    | On while the HDMI output frame rate is above 0. Attribute: `hdmi_out_frame_rate` |
-| Input source      | `select.receiver_living_room_tv_input_source`           | Options are `None` (disconnect) and every transmitter alias                      |
-| Display power on  | `button.receiver_living_room_tv_display_power_on`       | Sends display power on to the display attached to the receiver                   |
-| Display power off | `button.receiver_living_room_tv_display_power_off`      | Sends display power off                                                          |
+| Entity            | Example entity ID                                 | Notes                                                                            |
+| ----------------- | ------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Controller link   | `binary_sensor.receiver_display1_controller_link` | As for transmitters                                                              |
+| Video output      | `binary_sensor.receiver_display1_video_output`    | On while the HDMI output frame rate is above 0. Attribute: `hdmi_out_frame_rate` |
+| Input source      | `select.receiver_display1_input_source`           | Options are `None` (disconnect) and every transmitter alias                      |
+| Display power on  | `button.receiver_display1_display_power_on`       | Sends display power on to the display attached to the receiver                   |
+| Display power off | `button.receiver_display1_display_power_off`      | Sends display power off                                                          |
 
 ### Availability and updates
 
 - If the controller cannot be reached, all entities become unavailable. The integration reconnects automatically on the
-  next update.
+  next update, and a service call or button press also reconnects first.
+- After **Reboot controller**, all entities are unavailable until the controller is back and the next update succeeds.
 - If an endpoint is offline, its **Controller link** sensor shows off and its other entities are unavailable.
 - The controller pushes endpoint online/offline and video found/lost notifications, which trigger a refresh. Polling at
   the update interval is a fallback.
@@ -128,9 +135,9 @@ Routes a transmitter to one or more receivers, or disconnects the receivers.
 ```yaml
 action: wyrestorm_networkhd.matrix_set
 data:
-  source_device: "Apple TV"
+  source_device: "Source1"
   target_device:
-    - "Living Room TV"
+    - "Display1"
 ```
 
 ### `wyrestorm_networkhd.power_control`
@@ -147,7 +154,7 @@ Sends display power on or off to the displays attached to receivers.
 action: wyrestorm_networkhd.power_control
 data:
   devices:
-    - "Living Room TV"
+    - "Display1"
   power_state: "on"
 ```
 
@@ -161,37 +168,43 @@ data:
 
 ## Example automation
 
-Route the Apple TV to the living room display and switch the display on when the Apple TV starts sending video:
+Route Source1 to Display1 and switch the display on when Source1 starts sending video:
 
 ```yaml
 automation:
-  - alias: "Living room: watch Apple TV"
+  - alias: "Display1: watch Source1"
     triggers:
       - trigger: state
-        entity_id: binary_sensor.transmitter_apple_tv_video_input
+        entity_id: binary_sensor.transmitter_source1_video_input
         to: "on"
     actions:
       - action: select.select_option
         target:
-          entity_id: select.receiver_living_room_tv_input_source
+          entity_id: select.receiver_display1_input_source
         data:
-          option: "Apple TV"
+          option: "Source1"
       - action: wyrestorm_networkhd.power_control
         data:
-          devices: "Living Room TV"
+          devices: "Display1"
           power_state: "on"
 ```
 
 ## Diagnostics
 
-On the integration entry, choose **Download diagnostics**. The file contains the entry and the latest controller data,
-with the host, username, password, IP addresses, gateway and MAC addresses redacted.
+On the integration entry, choose **Download diagnostics**. The file contains the entry, the latest controller data and
+the raw device status and info, with the host, username, password, IP addresses, gateway and MAC addresses redacted.
 
 ## Security
 
 The integration accepts the controller's SSH host key without verifying it, so nothing protects against another device
 on your network impersonating the controller and receiving the SSH credentials. Keep the controller on a trusted network
 segment.
+
+## Known limitations
+
+- Transmitters and receivers added to the controller after the integration is set up get devices and entities only
+  after the integration entry is reloaded (or Home Assistant restarts).
+- Aliases with spaces cannot be used (see [Devices and entities](#devices-and-entities)).
 
 ## Troubleshooting
 

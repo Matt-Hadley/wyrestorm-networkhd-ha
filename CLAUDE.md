@@ -8,7 +8,7 @@ This is a Home Assistant integration for WyreStorm NetworkHD matrix switching sy
 ### Coordinator Pattern
 - `WyreStormCoordinator` (coordinator.py) owns the SSH client and makes every API call; it is stored on `entry.runtime_data` (`WyreStormConfigEntry`).
 - Entities NEVER call the API directly: use `async_set_matrix`, `async_set_power`, `async_reboot`.
-- `_async_setup` connects and registers the `endpoint`/`video` notification callbacks; `async_shutdown` unregisters them and disconnects.
+- `_async_setup` connects and registers the `endpoint`/`video` notification callbacks; `async_shutdown` unregisters them and disconnects under the lock.
 - Every API exchange holds `coordinator._lock` (the controller handles one command/response at a time).
 - Catch `API_ERRORS` (`NetworkHDError`, `OSError`, `ValueError`), never match exception message strings. Commands raise `HomeAssistantError(translation_key="command_failed")`.
 
@@ -18,7 +18,8 @@ This is a Home Assistant integration for WyreStorm NetworkHD matrix switching sy
 3. **Matrix changes** (`async_set_matrix`) re-read only `matrix get`.
 4. **Display power**: no refresh (it does not change device status).
 5. **Device info** is cached on the coordinator for 10 minutes (monotonic timestamp) and invalidated by endpoint notifications.
-6. **Link loss**: a failed update raises `UpdateFailed` (entities go unavailable; DataUpdateCoordinator logs once on loss and once on recovery) and disconnects; the next update reconnects.
+6. **Link loss**: a failed update raises `UpdateFailed` (entities go unavailable; DataUpdateCoordinator logs once on loss and once on recovery) and disconnects; the next update or command reconnects (`_ensure_connected`, under the lock). Rejected credentials raise `ConfigEntryAuthFailed` (reauth flow).
+7. **Matrix changes** update `self.data` and call `async_update_listeners()` (not `async_set_updated_data`, which would cancel a pending debounced refresh and reset the poll timer). The reboot button marks the coordinator failed until the next successful update.
 
 ### Devices and Entities
 - The controller device is registered in `async_setup_entry` with identifier `(DOMAIN, host)`; endpoint devices use `(DOMAIN, true_name)` and `via_device_id=coordinator.controller_device_id`.
@@ -54,13 +55,13 @@ custom_components/wyrestorm_networkhd/
 ├── coordinator.py           # Connection, polling, notifications, commands
 ├── services.py              # matrix_set / power_control
 ├── entity.py                # Base entity for endpoint devices
-├── config_flow.py           # User, reconfigure and options flows
+├── config_flow.py           # User, reconfigure, reauth and options flows
 ├── diagnostics.py           # Redacted diagnostics
 ├── const.py                 # Constants
 ├── services.yaml, strings.json, translations/en.json, icons.json
 ├── brand/icon.png           # Local brand image (HA >= 2026.3)
 ├── _utils_coordinator.py    # Builds device collections / matrix mapping
-├── models/                  # Data models (no business logic)
+├── models/                  # The endpoint fields entities read (no business logic)
 ├── binary_sensor.py         # Controller link / video sensors
 ├── button.py                # Display power and controller reboot buttons
 └── select.py                # Input source selection
@@ -92,7 +93,7 @@ HA-level tests (tests/custom_components/wyrestorm_networkhd/test_*.py) mock `Net
 6. Test with actual hardware if possible
 
 ## 📊 Performance Notes
-- With library 2.2.x every command takes at least ~1 s (idle-gap response framing), and a full refresh sends six commands, so a full refresh takes several seconds. Keep targeted paths (matrix-only refresh, no refresh after display power) targeted.
+- A full refresh sends five commands (four when device info is cached). Keep targeted paths (matrix-only refresh, no refresh after display power) targeted.
 
 ## 🐛 Debugging Tips
 - Enable debug logging: Set logger `custom_components.wyrestorm_networkhd` (and `wyrestorm_networkhd`) to `debug`

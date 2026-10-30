@@ -30,8 +30,8 @@ python3.14 -m venv .venv
 
 Without Make, install the pre-commit hooks with `.venv/bin/pre-commit install`.
 
+The integration depends on the [wyrestorm-networkhd](https://github.com/Matt-Hadley/wyrestorm-networkhd-py) library
 (`wyrestorm-networkhd>=3.0.0,<4` in `manifest.json`).
-(`wyrestorm-networkhd>=2.2.1,<3` in `manifest.json`). The next library release moves to 3.x.
 
 ## Running tests
 
