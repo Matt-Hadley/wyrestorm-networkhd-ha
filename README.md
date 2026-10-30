@@ -220,10 +220,12 @@ ssh-keyscan -p 10022 <host> | ssh-keygen -lf -
 Paste the `SHA256:...` line(s); several fingerprints are allowed (one per line). Controllers usually offer an ECDSA and
 an RSA key and the integration negotiates ECDSA, so paste both lines or the ECDSA one.
 
-If the controller presents a different key later, the entry stops (no retries) and Home Assistant shows a repair issue
-with the presented fingerprint. If you expect the change (the controller was replaced or reset), use **Reconfigure** to
-enter the new fingerprint or clear the field to confirm the new key. Otherwise find out what is answering at the
-controller's address. Diagnostics show whether a key is pinned and the pinned fingerprint.
+If the controller presents a different key later, entities go unavailable and a repair issue is shown with the presented
+fingerprint; Home Assistant keeps checking at each poll without sending credentials (the key is rejected before login),
+and recovers automatically if the pinned key comes back. (If the key differs when the entry is set up, at startup or on
+reload, the entry stops without retrying.) If you expect the change (the controller was replaced or reset), use
+**Reconfigure** to enter the new fingerprint or clear the field to confirm the new key. Otherwise find out what is
+answering at the controller's address. Diagnostics show whether a key is pinned and the pinned fingerprint.
 
 ## Known limitations
 
