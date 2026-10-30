@@ -1,8 +1,9 @@
 """Tests for setup, unload, the coordinator and entity availability."""
 
 import asyncio
+from dataclasses import replace
 from datetime import timedelta
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from freezegun.api import FrozenDateTimeFactory
@@ -26,10 +27,16 @@ from wyrestorm_networkhd.exceptions import (
 from wyrestorm_networkhd.models.api_notifications import NotificationEndpoint, NotificationVideo
 from wyrestorm_networkhd.models.api_query import DeviceJsonString, Matrix
 
+from custom_components.wyrestorm_networkhd import async_remove_config_entry_device
+from custom_components.wyrestorm_networkhd.binary_sensor import (
+    WyreStormControllerLinkSensor,
+    WyreStormVideoOutputSensor,
+)
 from custom_components.wyrestorm_networkhd.const import CONF_HOST_KEY_FINGERPRINT, DOMAIN
 from custom_components.wyrestorm_networkhd.diagnostics import async_get_config_entry_diagnostics
+from custom_components.wyrestorm_networkhd.select import WyreStormReceiverSourceSelect
 
-from .conftest import ENTRY_DATA, FINGERPRINT, HOST, OTHER_FINGERPRINT, RAW
+from .conftest import ENTRY_DATA, FINGERPRINT, HOST, MAC, OTHER_FINGERPRINT, PINNED_DATA, RAW, parsed_responses
 
 LINK_RX1 = "binary_sensor.receiver_display1_controller_link"
 VIDEO_TX1 = "binary_sensor.transmitter_source1_video_input"
@@ -54,11 +61,17 @@ async def test_setup_and_unload(
     mock_client.disconnect.assert_awaited()
 
 
-@pytest.mark.parametrize("fail", ["connect", "query"])
+@pytest.mark.parametrize(
+    ("fail", "reason"),
+    [
+        ("connect", f"Cannot connect to the NetworkHD controller at {HOST}: refused"),
+        ("query", f"Error communicating with the NetworkHD controller at {HOST}: No 'devices status' key"),
+    ],
+)
 async def test_setup_not_ready(
-    hass: HomeAssistant, config_entry: MockConfigEntry, mock_client: MagicMock, fail: str
+    hass: HomeAssistant, config_entry: MockConfigEntry, mock_client: MagicMock, fail: str, reason: str
 ) -> None:
-    """An unreachable or misbehaving controller retries setup later."""
+    """An unreachable or misbehaving controller retries setup later, with a translated reason."""
     if fail == "connect":
         mock_client.connect.side_effect = NHDConnectionError("refused")
     else:
@@ -66,6 +79,7 @@ async def test_setup_not_ready(
     await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     assert config_entry.state is ConfigEntryState.SETUP_RETRY
+    assert config_entry.reason == reason
 
 
 RX = "wyrestorm_networkhd_NHD-400-RX-E4CE02BB000"
@@ -480,3 +494,265 @@ async def test_upgrade_pins_presented_key(
     assert mock_client.ssh_cls.call_count == 1
     assert hass.states.get(LINK_RX1).state == STATE_ON
     assert caplog.text.count("Pinned the SSH host key") == 1
+
+
+async def test_entry_adopts_mac(
+    hass: HomeAssistant, setup_integration: MockConfigEntry, mock_lookup_mac: AsyncMock
+) -> None:
+    """An entry identified by host takes the controller MAC at the next setup; device and entity ids are kept."""
+    entry = setup_integration
+    assert entry.unique_id == HOST  # no mDNS reply at the first setup: retried later
+    dev_reg, ent_reg = dr.async_get(hass), er.async_get(hass)
+    controller = dev_reg.async_get_device_by_identifier((DOMAIN, HOST), entry.entry_id)
+    entities = {e.entity_id: e.unique_id for e in er.async_entries_for_config_entry(ent_reg, entry.entry_id)}
+
+    mock_lookup_mac.return_value = MAC
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert entry.unique_id == MAC
+    mock_lookup_mac.assert_awaited_with(HOST)
+    device = dev_reg.async_get_device_by_identifier((DOMAIN, MAC), entry.entry_id)
+    assert device.id == controller.id
+    assert device.connections == {(dr.CONNECTION_NETWORK_MAC, "e4:ce:02:aa:bb:cc")}
+    after = {e.entity_id: e.unique_id for e in er.async_entries_for_config_entry(ent_reg, entry.entry_id)}
+    assert after == {**entities, REBOOT: f"{DOMAIN}_{MAC}_controller_reboot"}  # same entity ids
+    assert hass.states.get(REBOOT).state != STATE_UNAVAILABLE
+    assert MAC not in str(await async_get_config_entry_diagnostics(hass, entry))
+
+    mock_lookup_mac.reset_mock()
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    mock_lookup_mac.assert_not_awaited()  # identified: no more lookups
+
+
+async def test_entry_keeps_host_when_mac_taken(
+    hass: HomeAssistant, config_entry: MockConfigEntry, mock_client: MagicMock, mock_lookup_mac: AsyncMock
+) -> None:
+    """If another entry already has the MAC, the entry keeps its host id (and still loads)."""
+    MockConfigEntry(domain=DOMAIN, unique_id=MAC, data=PINNED_DATA).add_to_hass(hass)
+    mock_lookup_mac.return_value = MAC
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    assert config_entry.unique_id == HOST
+    assert config_entry.state is ConfigEntryState.LOADED
+
+
+def drop_endpoint(query: MagicMock, alias: str) -> None:
+    """Make the controller stop reporting the endpoint `alias` (as if it was removed from the controller)."""
+    for method, attr in [
+        (query.config_get_devicejsonstring, "aliasName"),
+        (query.config_get_device_status, "aliasname"),
+        (query.config_get_device_info, "aliasname"),
+    ]:
+        method.return_value = [d for d in method.return_value if getattr(d, attr) != alias]
+
+
+async def poll(hass: HomeAssistant, freezer: FrozenDateTimeFactory, times: int = 1) -> None:
+    """Run `times` fallback polls."""
+    for _ in range(times):
+        freezer.tick(timedelta(seconds=61))
+        async_fire_time_changed(hass)
+        await hass.async_block_till_done()
+
+
+async def test_new_endpoint_added_without_reload(
+    hass: HomeAssistant, config_entry: MockConfigEntry, mock_client: MagicMock, freezer: FrozenDateTimeFactory
+) -> None:
+    """An endpoint that appears after setup gets its device and entities at the next refresh."""
+    query = mock_client.api.api_query
+    full = {m: getattr(query, m).return_value for m in ("config_get_devicejsonstring", "config_get_device_status")}
+    drop_endpoint(query, "Display1")
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    assert hass.states.get(LINK_RX1) is None
+
+    for method, value in full.items():
+        getattr(query, method).return_value = value
+    query.config_get_device_info.return_value = parsed_responses()["config_get_device_info"]
+    # The controller notifies that the endpoint came online (which also re-reads the cached device info).
+    mock_client.notification_handler.fire("endpoint", NotificationEndpoint(online=True, device="Display1"))
+    await poll(hass, freezer)
+
+    for entity_id in (LINK_RX1, SOURCE_RX1, POWER_ON_RX1, "binary_sensor.receiver_display1_video_output"):
+        assert hass.states.get(entity_id).state != STATE_UNAVAILABLE, entity_id
+    device = dr.async_get(hass).async_get_device_by_identifier(
+        (DOMAIN, "NHD-400-RX-E4CE02BB0001"), config_entry.entry_id
+    )
+    assert device.via_device_id == config_entry.runtime_data.controller_device_id
+    assert len(er.async_entries_for_config_entry(er.async_get(hass), config_entry.entry_id)) == len(
+        [e for p in EXPECTED_ENTITIES.values() for e in p]
+    )
+
+
+async def test_removed_endpoint_device_removed_and_comes_back(
+    hass: HomeAssistant, setup_integration: MockConfigEntry, mock_client: MagicMock, freezer: FrozenDateTimeFactory
+) -> None:
+    """An endpoint the controller stops listing is removed after 3 refreshes; if it returns it is added again."""
+    entry = setup_integration
+    dev_reg, ent_reg = dr.async_get(hass), er.async_get(hass)
+    rx1 = (DOMAIN, "NHD-400-RX-E4CE02BB0001")
+    query = mock_client.api.api_query
+    full = {m: getattr(query, m).return_value for m in ("config_get_devicejsonstring", "config_get_device_status")}
+    drop_endpoint(query, "Display1")
+
+    await poll(hass, freezer, 2)
+    assert dev_reg.async_get_device_by_identifier(rx1, entry.entry_id)
+    assert hass.states.get(LINK_RX1).state == STATE_UNAVAILABLE
+
+    await poll(hass, freezer)
+    assert dev_reg.async_get_device_by_identifier(rx1, entry.entry_id) is None
+    assert ent_reg.async_get(LINK_RX1) is None
+    assert hass.states.get(LINK_RX1) is None
+    assert "Display1" not in hass.states.get("select.receiver_display2_input_source").attributes.get("options", [])
+    assert dev_reg.async_get_device_by_identifier((DOMAIN, HOST), entry.entry_id)  # the controller stays
+
+    for method, value in full.items():
+        getattr(query, method).return_value = value
+    await poll(hass, freezer)
+    assert dev_reg.async_get_device_by_identifier(rx1, entry.entry_id)
+    assert hass.states.get(LINK_RX1).state == STATE_ON
+
+
+async def test_old_controller_device_removed(
+    hass: HomeAssistant, setup_integration: MockConfigEntry, freezer: FrozenDateTimeFactory
+) -> None:
+    """A controller device left from an old host (with its reboot button) is removed as stale."""
+    entry = setup_integration
+    dev_reg, ent_reg = dr.async_get(hass), er.async_get(hass)
+    orphan = dev_reg.async_get_or_create(config_entry_id=entry.entry_id, identifiers={(DOMAIN, "192.0.2.99")})
+    button = ent_reg.async_get_or_create(
+        Platform.BUTTON, DOMAIN, f"{DOMAIN}_192.0.2.99_controller_reboot", config_entry=entry, device_id=orphan.id
+    )
+    await poll(hass, freezer, 3)
+    assert dev_reg.async_get(orphan.id) is None
+    assert ent_reg.async_get(button.entity_id) is None
+    assert hass.states.get(REBOOT)
+
+
+async def test_no_endpoints_reported_removes_nothing(
+    hass: HomeAssistant, setup_integration: MockConfigEntry, mock_client: MagicMock, freezer: FrozenDateTimeFactory
+) -> None:
+    """A controller that reports no endpoints at all (e.g. while it starts) does not empty the registry."""
+    entry = setup_integration
+    query = mock_client.api.api_query
+    for method in ("config_get_devicejsonstring", "config_get_device_status", "config_get_device_info"):
+        getattr(query, method).return_value = []
+    devices = len(dr.async_entries_for_config_entry(dr.async_get(hass), entry.entry_id))
+    await poll(hass, freezer, 4)
+    assert len(dr.async_entries_for_config_entry(dr.async_get(hass), entry.entry_id)) == devices
+
+
+async def test_remove_device_manually(
+    hass: HomeAssistant, setup_integration: MockConfigEntry, mock_client: MagicMock, freezer: FrozenDateTimeFactory
+) -> None:
+    """Users can delete a device the controller no longer reports, but not a current one or the controller."""
+    entry = setup_integration
+    assert entry.supports_remove_device
+    dev_reg = dr.async_get(hass)
+    rx1 = dev_reg.async_get_device_by_identifier((DOMAIN, "NHD-400-RX-E4CE02BB0001"), entry.entry_id)
+    controller = dev_reg.async_get_device_by_identifier((DOMAIN, HOST), entry.entry_id)
+    assert not await async_remove_config_entry_device(hass, entry, rx1)
+    assert not await async_remove_config_entry_device(hass, entry, controller)
+
+    drop_endpoint(mock_client.api.api_query, "Display1")
+    await poll(hass, freezer)
+    assert await async_remove_config_entry_device(hass, entry, rx1)
+
+
+async def test_remove_device_when_not_loaded(hass: HomeAssistant, setup_integration: MockConfigEntry) -> None:
+    """Device removal is refused (not raised) while the entry is not loaded."""
+    entry = setup_integration
+    rx1 = dr.async_get(hass).async_get_device_by_identifier((DOMAIN, "NHD-400-RX-E4CE02BB0001"), entry.entry_id)
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    assert not await async_remove_config_entry_device(hass, entry, rx1)
+
+
+@pytest.mark.usefixtures("setup_integration")
+async def test_stale_device_shared_with_another_entry_kept(
+    hass: HomeAssistant, mock_client: MagicMock, freezer: FrozenDateTimeFactory
+) -> None:
+    """A stale device that another config entry also uses is only detached from this entry."""
+    other = MockConfigEntry(domain="other")
+    other.add_to_hass(hass)
+    dev_reg = dr.async_get(hass)
+    rx1 = dev_reg.async_get_or_create(config_entry_id=other.entry_id, identifiers={(DOMAIN, "NHD-400-RX-E4CE02BB0001")})
+    drop_endpoint(mock_client.api.api_query, "Display1")
+    await poll(hass, freezer, 3)
+    assert dev_reg.async_get(rx1.id).config_entries == {other.entry_id}
+    assert er.async_get(hass).async_get(LINK_RX1) is None
+
+
+OLD_IP = "192.0.2.99"
+
+
+@pytest.fixture
+def entry_reconfigured_in_1_0(hass: HomeAssistant) -> tuple[MockConfigEntry, dr.DeviceEntry, dr.DeviceEntry]:
+    """An entry reconfigured before 1.0.1: unique_id still the old IP, the controller device keyed by the host.
+
+    Returns the entry, the controller device (with the reboot button) and an orphan device left at the old IP.
+    """
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=OLD_IP, title=f"WyreStorm NetworkHD ({HOST})", data=PINNED_DATA)
+    entry.add_to_hass(hass)
+    dev_reg, ent_reg = dr.async_get(hass), er.async_get(hass)
+    devices = []
+    for host in (HOST, OLD_IP):
+        device = dev_reg.async_get_or_create(config_entry_id=entry.entry_id, identifiers={(DOMAIN, host)})
+        ent_reg.async_get_or_create(
+            Platform.BUTTON, DOMAIN, f"{DOMAIN}_{host}_controller_reboot", config_entry=entry, device_id=device.id
+        )
+        devices.append(device)
+    return entry, *devices
+
+
+@pytest.mark.parametrize("mac", [MAC, None])
+async def test_entry_reconfigured_in_1_0_keeps_controller(
+    hass: HomeAssistant,
+    entry_reconfigured_in_1_0: tuple[MockConfigEntry, dr.DeviceEntry, dr.DeviceEntry],
+    mock_client: MagicMock,
+    mock_lookup_mac: AsyncMock,
+    freezer: FrozenDateTimeFactory,
+    mac: str | None,
+) -> None:
+    """The controller device keyed by the host is kept (moved to the MAC if known); the old-IP orphan goes."""
+    entry, controller, orphan = entry_reconfigured_in_1_0
+    ent_reg = er.async_get(hass)
+    reboot = ent_reg.async_get_entity_id(Platform.BUTTON, DOMAIN, f"{DOMAIN}_{HOST}_controller_reboot")
+    orphan_reboot = ent_reg.async_get_entity_id(Platform.BUTTON, DOMAIN, f"{DOMAIN}_{OLD_IP}_controller_reboot")
+    mock_lookup_mac.return_value = mac
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    controller_id = mac or HOST
+    dev_reg = dr.async_get(hass)
+    assert dev_reg.async_get_device_by_identifier((DOMAIN, controller_id), entry.entry_id).id == controller.id
+    assert ent_reg.async_get(reboot).unique_id == f"{DOMAIN}_{controller_id}_controller_reboot"
+    assert hass.states.get(reboot).state != STATE_UNAVAILABLE
+
+    await poll(hass, freezer, 3)
+    assert dev_reg.async_get(orphan.id) is None
+    assert ent_reg.async_get(orphan_reboot) is None
+    assert dev_reg.async_get(controller.id)
+    assert ent_reg.async_get(reboot).device_id == controller.id
+
+
+async def test_entities_without_data(
+    hass: HomeAssistant, setup_integration: MockConfigEntry, mock_client: MagicMock
+) -> None:
+    """Entities whose endpoint just vanished, or with an unparsable frame rate, report nothing instead of failing."""
+    coordinator = setup_integration.runtime_data
+    rx = coordinator.data.device_receivers["NHD-400-RX-E4CE02BB0001"]
+    link = WyreStormControllerLinkSensor(coordinator, rx, "controller_link")
+    video = WyreStormVideoOutputSensor(coordinator, replace(rx, hdmi_out_frame_rate="n/a"), "video_output")
+    select = WyreStormReceiverSourceSelect(coordinator, rx, "source")
+
+    coordinator.data = replace(
+        coordinator.data, device_receivers={rx.true_name: replace(rx, hdmi_out_frame_rate="n/a")}
+    )
+    assert video.is_on is False
+
+    coordinator.data = replace(coordinator.data, device_receivers={})
+    assert link.is_on is None
+    assert link.extra_state_attributes == {}
+    assert select.current_option is None
+    await select.async_select_option("Source1")  # raced with a refresh that dropped the receiver: ignored
+    mock_client.api.media_stream_matrix_switch.matrix_set.assert_not_awaited()

@@ -10,7 +10,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .coordinator import WyreStormConfigEntry
-from .entity import WyreStormEndpointEntity
+from .entity import WyreStormEndpointEntity, async_add_endpoint_entities
+from .models.device_receiver_transmitter import DeviceReceiver, DeviceTransmitter
 
 PARALLEL_UPDATES = 0  # read-only; the coordinator does all fetching
 
@@ -21,19 +22,16 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up WyreStorm NetworkHD binary sensors."""
-    coordinator = entry.runtime_data
-    entities: list[BinarySensorEntity] = []
-    for tx in coordinator.data.device_transmitters.values():
-        entities += [
-            WyreStormControllerLinkSensor(coordinator, tx, "controller_link"),
-            WyreStormVideoInputSensor(coordinator, tx, "video_input"),
-        ]
-    for rx in coordinator.data.device_receivers.values():
-        entities += [
-            WyreStormControllerLinkSensor(coordinator, rx, "controller_link"),
-            WyreStormVideoOutputSensor(coordinator, rx, "video_output"),
-        ]
-    async_add_entities(entities)
+
+    def create(device: DeviceReceiver | DeviceTransmitter) -> list[BinarySensorEntity]:
+        coordinator = entry.runtime_data
+        if isinstance(device, DeviceReceiver):
+            video: BinarySensorEntity = WyreStormVideoOutputSensor(coordinator, device, "video_output")
+        else:
+            video = WyreStormVideoInputSensor(coordinator, device, "video_input")
+        return [WyreStormControllerLinkSensor(coordinator, device, "controller_link"), video]
+
+    async_add_endpoint_entities(entry, async_add_entities, create)
 
 
 class WyreStormControllerLinkSensor(WyreStormEndpointEntity, BinarySensorEntity):

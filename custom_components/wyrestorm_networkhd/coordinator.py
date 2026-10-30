@@ -14,7 +14,10 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_PORT, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryError, HomeAssistantError
-from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers import (
+    device_registry as dr,
+    issue_registry as ir,
+)
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from wyrestorm_networkhd import NHDAPI, HostKeyMismatchError, NetworkHDClientSSH, normalize_fingerprints
@@ -24,12 +27,12 @@ from wyrestorm_networkhd.models.api_query import DeviceInfo, DeviceStatus, Matri
 from ._utils_coordinator import build_device_collections
 from .const import (
     CONF_HOST_KEY_FINGERPRINT,
-    CONF_UPDATE_INTERVAL,
     DEFAULT_PORT,
     DEFAULT_UPDATE_INTERVAL,
     DOMAIN,
     SSH_HOST_KEY_POLICY,
 )
+from .mdns import is_mac
 from .models.coordinator import CoordinatorData
 from .models.device_receiver_transmitter import DeviceReceiver, DeviceTransmitter
 
@@ -39,6 +42,7 @@ _LOGGER = logging.getLogger(__name__)
 API_ERRORS = (NetworkHDError, OSError, ValueError)
 NOTIFICATION_TYPES = ("endpoint", "video")
 DEVICE_INFO_TTL = 600  # seconds; device info (MAC, firmware, network) rarely changes
+STALE_REFRESHES = 3  # successful refreshes a device must be missing from before it is removed
 
 type WyreStormConfigEntry = ConfigEntry[WyreStormCoordinator]
 
@@ -73,15 +77,12 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
     def __init__(self, hass: HomeAssistant, entry: WyreStormConfigEntry) -> None:
         """Initialize coordinator."""
-        interval = entry.options.get(
-            CONF_UPDATE_INTERVAL, entry.data.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
-        )
         super().__init__(
             hass,
             _LOGGER,
             config_entry=entry,
             name="WyreStorm NetworkHD",
-            update_interval=timedelta(seconds=interval),
+            update_interval=timedelta(seconds=DEFAULT_UPDATE_INTERVAL),
         )
         self.host: str = entry.data[CONF_HOST]
         self.client = create_client(dict(entry.data))
@@ -91,6 +92,19 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
         self._device_status: list[DeviceStatus] = []  # kept for diagnostics
         self._device_info: list[DeviceInfo] = []
         self._device_info_time = -float("inf")
+        self._missing: dict[str, int] = {}  # device registry id -> consecutive refreshes without it
+
+    @property
+    def controller_id(self) -> str:
+        """Identifier of the controller device: its MAC once known (the entry unique id), else the host.
+
+        Not a host unique id: before 1.0.1 reconfigure left it at the old host while the device followed the new one.
+        """
+        return uid if is_mac(uid := self.config_entry.unique_id) else self.host
+
+    def device_ids(self, data: CoordinatorData) -> set[str]:
+        """Return the identifiers of the devices the controller currently reports, itself included."""
+        return {self.controller_id, *data.device_transmitters, *data.device_receivers}
 
     async def _async_setup(self) -> None:
         """Connect and subscribe to notifications (runs once before the first refresh)."""
@@ -100,9 +114,9 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
         except HostKeyMismatchError as err:
             raise self._host_key_mismatch(ConfigEntryError, err) from err  # no retries until reconfigured
         except AuthenticationError as err:
-            raise ConfigEntryAuthFailed(f"Controller at {self.host} rejected the credentials") from err
+            raise self._error(ConfigEntryAuthFailed, "invalid_auth") from err
         except API_ERRORS as err:
-            raise UpdateFailed(f"Cannot connect to controller at {self.host}: {err}") from err
+            raise self._error(UpdateFailed, "cannot_connect", error=str(err)) from err
         for notification_type in NOTIFICATION_TYPES:
             self.client.notification_handler.register_callback(notification_type, self._on_notification)
 
@@ -131,12 +145,16 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
             _LOGGER.debug("Not connected to %s, reconnecting", self.host)
             await self._connect()
 
-    def _host_key_mismatch(self, cls: type[HomeAssistantError], err: HostKeyMismatchError) -> HomeAssistantError:
+    def _error[E: HomeAssistantError](self, cls: type[E], key: str, **placeholders: str) -> E:
+        """Build a translated exception about this controller."""
         return cls(
             translation_domain=DOMAIN,
-            translation_key="host_key_mismatch",
-            translation_placeholders={"host": self.host, "fingerprint": err.presented_fingerprint},
+            translation_key=key,
+            translation_placeholders={"host": self.host, **placeholders},
         )
+
+    def _host_key_mismatch[E: HomeAssistantError](self, cls: type[E], err: HostKeyMismatchError) -> E:
+        return self._error(cls, "host_key_mismatch", fingerprint=err.presented_fingerprint)
 
     async def _connect(self) -> None:
         """Connect; pin the host key if none is stored; a key mismatch raises a repair issue (and re-raises)."""
@@ -170,17 +188,40 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
         async with self._lock:
             try:
                 await self._ensure_connected()
-                return await self._fetch()
+                data = await self._fetch()
             except HostKeyMismatchError as err:
                 # Keep polling (the key is rejected before login) so a returning pinned key recovers on its own.
                 raise self._host_key_mismatch(UpdateFailed, err) from err
             except AuthenticationError as err:
-                raise ConfigEntryAuthFailed(f"Controller at {self.host} rejected the credentials") from err
+                raise self._error(ConfigEntryAuthFailed, "invalid_auth") from err
             except API_ERRORS as err:
                 # Drop the link so the next update starts from a clean connection.
                 with suppress(*API_ERRORS):
                     await self.client.disconnect()
-                raise UpdateFailed(f"Error communicating with controller at {self.host}: {err}") from err
+                raise self._error(UpdateFailed, "update_failed", error=str(err)) from err
+        self._remove_stale_devices(data)
+        return data
+
+    def _remove_stale_devices(self, data: CoordinatorData) -> None:
+        """Remove devices of this entry the controller has stopped reporting (removed endpoints, an old controller id).
+
+        The controller lists every endpoint it knows, offline ones included. A device goes only after it is
+        missing from STALE_REFRESHES successful refreshes in a row, and never while the controller reports no
+        endpoints at all (as it may while it starts).
+        """
+        if not (data.device_transmitters or data.device_receivers):
+            return
+        current = self.device_ids(data)
+        dev_reg = dr.async_get(self.hass)
+        for device in dr.async_entries_for_config_entry(dev_reg, self.config_entry.entry_id):
+            if any(domain == DOMAIN and name in current for domain, name in device.identifiers):
+                self._missing.pop(device.id, None)
+            elif (missing := self._missing.get(device.id, 0) + 1) < STALE_REFRESHES:
+                self._missing[device.id] = missing
+            else:
+                _LOGGER.info("Removing device %s: the controller at %s no longer reports it", device.name, self.host)
+                dev_reg.async_update_device(device.id, remove_config_entry_id=self.config_entry.entry_id)
+                del self._missing[device.id]
 
     async def _fetch(self) -> CoordinatorData:
         query = self.api.api_query
@@ -204,11 +245,7 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
         )
 
     def _command_failed(self, err: Exception) -> HomeAssistantError:
-        return HomeAssistantError(
-            translation_domain=DOMAIN,
-            translation_key="command_failed",
-            translation_placeholders={"host": self.host, "error": str(err)},
-        )
+        return self._error(HomeAssistantError, "command_failed", error=str(err))
 
     # Lookups (by alias or true name)
     def find_receiver(self, name: str) -> DeviceReceiver | None:
@@ -267,4 +304,4 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 raise self._command_failed(err) from err
             with suppress(*API_ERRORS):
                 await self.client.disconnect()
-        self.async_set_update_error(UpdateFailed(f"Controller at {self.host} is rebooting"))
+        self.async_set_update_error(self._error(UpdateFailed, "rebooting"))

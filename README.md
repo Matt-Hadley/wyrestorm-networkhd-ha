@@ -5,11 +5,22 @@
 [![HACS](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=flat-square)](https://hacs.xyz/)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2026.8%2B-41BDF5.svg?style=flat-square)](https://www.home-assistant.io/)
 
-A Home Assistant custom integration for WyreStorm NetworkHD AV-over-IP systems. It connects to the NetworkHD controller
-over SSH and lets you route transmitters to receivers, switch the displays attached to receivers on and off, and see
-whether each endpoint is online and passing video.
+A Home Assistant custom integration for [WyreStorm](https://www.wyrestorm.com) NetworkHD AV-over-IP systems. NetworkHD
+sends HDMI video over a network: transmitters (encoders) sit next to the sources, receivers (decoders) next to the
+displays, and a controller manages which source each display shows. The integration connects to the NetworkHD
+controller over SSH and lets you route transmitters to receivers, switch the displays attached to receivers on and off,
+and see whether each endpoint is online and passing video.
 
 It is built on the [wyrestorm-networkhd](https://github.com/Matt-Hadley/wyrestorm-networkhd-py) Python library.
+
+## Use cases
+
+- Switch the source of every display from a Home Assistant dashboard, a voice assistant or a scene ("Movie night":
+  the media player on the living room TV, the game console on the den TV).
+- Follow what is happening: route a camera or doorbell feed to the kitchen display when someone rings, then switch back.
+- Turn displays on and off with the rest of the house: off when everyone leaves or at night, on when a source starts
+  sending video.
+- Notice problems: get notified when a transmitter or receiver drops off the network, or a source stops sending video.
 
 ## Requirements
 
@@ -20,7 +31,17 @@ It is built on the [wyrestorm-networkhd](https://github.com/Matt-Hadley/wyrestor
 - NetworkHD transmitters and receivers supported by the
   [wyrestorm-networkhd](https://github.com/Matt-Hadley/wyrestorm-networkhd-py) library.
 
-Tested on an NHD-000-CTL (firmware v9.4.7, API v1.28) with NHD-400 transmitters and receivers (firmware v2.5.6).
+## Supported devices
+
+Known to work:
+
+- NHD-000-CTL controller (tested with firmware v9.4.7, API v1.28)
+- NHD-400 transmitters and receivers (tested with firmware v2.5.6)
+
+Expected to work, not tested: the NHD-CTL-PRO controller, and the other NetworkHD transmitters and receivers that the
+controller lists (the integration only uses the controller's API, never talks to endpoints directly).
+
+Not supported: controllers reachable only over Telnet (enable SSH), and WyreStorm products outside the NetworkHD range.
 
 ## Installation
 
@@ -40,14 +61,16 @@ Tested on an NHD-000-CTL (firmware v9.4.7, API v1.28) with NHD-400 transmitters 
 
 ## Configuration
 
-Go to **Settings > Devices & services > Add integration** and search for **WyreStorm NetworkHD**.
+Home Assistant discovers NetworkHD controllers on its own network (see [Discovery](#discovery)): a **Discovered** card
+appears under **Settings > Devices & services**; select **Add** and enter the SSH details below (without the host).
+Otherwise go to **Settings > Devices & services > Add integration** and search for **WyreStorm NetworkHD**.
 
 | Field    | Default     | Notes                                    |
 | -------- | ----------- | ---------------------------------------- |
-| Host     |             | IP address or hostname of the controller |
-| Username | `wyrestorm` | Controller SSH username                  |
-| Password | `networkhd` | Controller SSH password                  |
-| Port     | `10022`     | Controller SSH port                      |
+| Host     |             | IP address or hostname of the controller. Find it in your router's list of clients (a host named `NHD-000-CTL-...`). Give the controller a fixed address (DHCP reservation) if you can |
+| Username | `wyrestorm` | Controller SSH username; the factory default unless you changed it on the controller |
+| Password | `networkhd` | Controller SSH password; the factory default unless you changed it on the controller |
+| Port     | `10022`     | The controller's SSH API port |
 | SSH host key fingerprint (optional) | | Pin the controller's key before the first connect (see [Security](#security)) |
 
 The integration connects and queries the controller's version before creating the entry. If that fails you see one of:
@@ -62,21 +85,27 @@ The integration connects and queries the controller's version before creating th
 If you leave the fingerprint empty, the integration shows the SSH host key the controller presented and asks you to
 confirm it; it is then pinned (see [Security](#security)).
 
-Each controller can be added once (its host identifies it).
-
-### Options
-
-**Configure** on the integration entry has one option:
-
-- **Update interval (seconds)**: fallback polling interval, 10 to 300, default 60. The integration reloads when you
-  change it.
+Each controller can be added once. It is identified by its MAC address, which the controller announces over mDNS
+(the SSH API does not report it); a controller that does not answer mDNS is identified by its host until it does.
 
 ### Reconfigure
 
 **Reconfigure** on the integration entry changes the host, username, password, port and SSH host key fingerprint. The
-new details are tested before they are saved. Changing the host keeps the same controller device and its entities.
-The fingerprint field is pre-filled with the pinned key: edit it to pin another key, or clear it to confirm the key the
+new details are tested before they are saved. Changing the host keeps the same controller device and its entities; if
+the new host announces a different MAC address, it is another controller and reconfigure stops with "different
+controller". The fingerprint field is pre-filled with the pinned key: edit it to pin another key, or clear it to confirm the key the
 controller presents now.
+
+### Discovery
+
+The controller announces itself over mDNS as a `_workstation._tcp` service named `NHD-000-CTL-<MAC> [<MAC>]`. Home
+Assistant's zeroconf discovery picks that up and offers to add the controller. Discovery also follows a controller that
+gets a new IP address: the entry is updated to the new address and reloaded. Only the address changes; the pinned SSH
+host key still has to match, so a different device at that address is refused (see [Security](#security)).
+
+mDNS is multicast and does not cross VLANs or subnets unless your network reflects it; add the controller by host
+then. To learn the MAC of a controller added by host, the integration asks the controller directly (unicast mDNS to
+port 5353) at every startup until it answers; that also works across subnets if UDP port 5353 is allowed.
 
 ### Reauthenticate
 
@@ -91,14 +120,19 @@ named `Transmitter - <alias>` and `Receiver - <alias>`, using the alias set on t
 address or true name when it has no alias). Entity IDs are built from the device name and the entity name when the
 entity is first added.
 
-The examples below use a controller at `192.168.1.50`, a transmitter with alias `Source1` and a receiver with alias
+Transmitters and receivers added to the controller later get their devices and entities at the next refresh, without a
+reload. Devices the controller no longer reports (an endpoint removed from the controller, or a controller device left
+over from an old address) are removed after three refreshes in a row without them; you can also delete such a device
+yourself from its device page.
+
+The examples below use a controller at `192.0.2.10`, a transmitter with alias `Source1` and a receiver with alias
 `Display1`. Aliases must not contain spaces: the controller's commands separate names with spaces.
 
 ### Controller: `WyreStorm NetworkHD (<host>)`
 
 | Entity            | Example entity ID                                           | Notes                                                       |
 | ----------------- | ----------------------------------------------------------- | ----------------------------------------------------------- |
-| Reboot controller | `button.wyrestorm_networkhd_192_168_1_50_reboot_controller` | Reboots the controller; the integration reconnects after it |
+| Reboot controller | `button.wyrestorm_networkhd_192_0_2_10_reboot_controller` | Configuration. Reboots the controller; the integration reconnects after it |
 
 ### Transmitter: `Transmitter - <alias>`
 
@@ -111,20 +145,32 @@ The examples below use a controller at `192.168.1.50`, a transmitter with alias 
 
 | Entity            | Example entity ID                                 | Notes                                                                            |
 | ----------------- | ------------------------------------------------- | -------------------------------------------------------------------------------- |
-| Controller link   | `binary_sensor.receiver_display1_controller_link` | As for transmitters                                                              |
+| Controller link   | `binary_sensor.receiver_display1_controller_link` | As for transmitters (diagnostic)                                                 |
 | Video output      | `binary_sensor.receiver_display1_video_output`    | On while the HDMI output frame rate is above 0. Attribute: `hdmi_out_frame_rate` |
 | Input source      | `select.receiver_display1_input_source`           | Options are `None` (disconnect) and every transmitter alias                      |
 | Display power on  | `button.receiver_display1_display_power_on`       | Sends display power on to the display attached to the receiver                   |
 | Display power off | `button.receiver_display1_display_power_off`      | Sends display power off                                                          |
 
-### Availability and updates
+### Availability
 
 - If the controller cannot be reached, all entities become unavailable. The integration reconnects automatically on the
-  next update, and a service call or button press also reconnects first.
+  next update, and a service call or button press also reconnects first. The loss and the recovery are each logged
+  once.
 - After **Reboot controller**, all entities are unavailable until the controller is back and the next update succeeds.
 - If an endpoint is offline, its **Controller link** sensor shows off and its other entities are unavailable.
-- The controller pushes endpoint online/offline and video found/lost notifications, which trigger a refresh. Polling at
-  the update interval is a fallback.
+
+## Data updates
+
+The controller pushes a notification when an endpoint goes online or offline and when a transmitter or receiver finds
+or loses video; each one triggers a refresh (bursts are collapsed into one refresh, at most every 10 seconds). The
+integration also polls the controller every 60 seconds as a fallback. A refresh sends four commands over the one SSH
+connection (the device info, with MAC addresses and firmware versions, is re-read only every 10 minutes or after an
+endpoint notification). Changing a receiver's source re-reads only the routing; display power commands do not refresh,
+because the controller does not report display power.
+
+The polling interval is fixed. The controller answers one command at a time, so polling faster would delay your
+commands. To poll on your own schedule instead, disable polling in the entry's **System options** and call
+`homeassistant.update_entity` from an automation.
 
 ## Services
 
@@ -175,7 +221,9 @@ data:
 - If the controller rejects or fails the command, the action fails with "Command to the NetworkHD controller at ...
   failed".
 
-## Example automation
+## Examples
+
+### Show a source on a display when it starts sending video
 
 Route Source1 to Display1 and switch the display on when Source1 starts sending video:
 
@@ -196,6 +244,41 @@ automation:
         data:
           devices: "Display1"
           power_state: "on"
+```
+
+### Switch all displays off at night
+
+```yaml
+automation:
+  - alias: "Displays off at midnight"
+    triggers:
+      - trigger: time
+        at: "00:00:00"
+    actions:
+      - action: wyrestorm_networkhd.power_control
+        data:
+          devices:
+            - "Display1"
+            - "Display2"
+          power_state: "off"
+```
+
+### Get notified when an endpoint goes offline
+
+```yaml
+automation:
+  - alias: "NetworkHD endpoint offline"
+    triggers:
+      - trigger: state
+        entity_id:
+          - binary_sensor.transmitter_source1_controller_link
+          - binary_sensor.receiver_display1_controller_link
+        to: "off"
+        for: "00:05:00"
+    actions:
+      - action: notify.notify
+        data:
+          message: "{{ trigger.to_state.name }} has been offline for 5 minutes"
 ```
 
 ## Diagnostics
@@ -229,18 +312,59 @@ answering at the controller's address. Diagnostics show whether a key is pinned 
 
 ## Known limitations
 
-- Transmitters and receivers added to the controller after the integration is set up get devices and entities only
-  after the integration entry is reloaded (or Home Assistant restarts).
+- Only video routing and display power are exposed. Audio, USB, IR and serial routing, video walls and multiview
+  layouts are not.
+- Display power buttons send a command; the controller does not report whether the display is on, so there is no
+  power state.
 - Aliases with spaces cannot be used (see [Devices and entities](#devices-and-entities)).
+- Only SSH is supported, not Telnet.
+- Discovery needs mDNS from the controller to reach Home Assistant, which usually means the same VLAN or subnet.
+- The polling interval is fixed at 60 seconds (changes are pushed, so this is a fallback).
 
 ## Troubleshooting
 
-- **Failed to connect**: check that SSH is enabled on the controller, that port 10022 is reachable from Home Assistant,
-  and that the host is correct.
-- **Endpoints unavailable**: check that they are online on the controller. Offline endpoints are kept and become
-  available again when they come back.
-- **Display power does nothing**: the receiver sends the command to its display; check that display control is set up
-  for that receiver on the controller and that the display supports it.
+### "Failed to connect" when adding the controller
+
+SSH is not enabled on the controller (its default API access is Telnet), the host is wrong, or port 10022 is blocked
+between Home Assistant and the controller. Enable SSH on the controller, check the host, and check that
+`ssh -p 10022 wyrestorm@<host>` works from another machine on the Home Assistant network.
+
+### "Invalid authentication"
+
+The controller rejected the username or password. The factory defaults are `wyrestorm` / `networkhd`; if they were
+changed on the controller, use the current ones. If this happens to a working entry, Home Assistant asks you to
+reauthenticate.
+
+### Entities unavailable and a "SSH host key changed" repair
+
+The controller presented a different SSH host key than the pinned one, so Home Assistant did not log in. If the
+controller was replaced or reset, use **Reconfigure** and enter the new fingerprint (or clear the field to confirm the
+new key). Otherwise find out what is answering at the controller's address. See [Security](#security).
+
+### Endpoints unavailable
+
+The endpoint is offline on the controller (its **Controller link** sensor is off). Check its power and network
+connection; it becomes available again when the controller reports it online.
+
+### Display power does nothing
+
+The receiver sends the command to its display over CEC, RS-232 or IR, as set up on the controller. Check that display
+control is set up for that receiver on the controller and that the display supports it.
+
+### The controller is not discovered
+
+mDNS does not reach Home Assistant, usually because the controller is on another VLAN or subnet. Add it by host
+instead, or enable an mDNS reflector on your router.
+
+### The controller keeps an IP-based identity
+
+The integration learns the controller's MAC by asking it over unicast mDNS (UDP port 5353) at every startup. If a
+firewall blocks that port between Home Assistant and the controller, the entry stays identified by its host, which
+still works but means discovery cannot follow an address change. Allow UDP 5353 from Home Assistant to the controller
+and restart, or give the controller a fixed address.
+
+If such a controller changes IP address, discovery may offer it as a new controller. Do not accept it (that would
+add the controller twice); use **Reconfigure** on the existing entry to enter the new address instead.
 
 To enable debug logging, add this to `configuration.yaml` and restart:
 
@@ -253,6 +377,13 @@ logger:
 
 Include the log, the diagnostics file and your controller firmware version when you
 [report a bug](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/issues).
+
+## Removing the integration
+
+This integration follows standard integration removal: go to **Settings > Devices & services**, select **WyreStorm
+NetworkHD**, open the menu of the entry and select **Delete**. Nothing has to be cleaned up on the controller; you can
+switch its SSH access off again if nothing else uses it. To remove the files too, remove the integration in HACS (or
+delete `config/custom_components/wyrestorm_networkhd/`) and restart Home Assistant.
 
 ## Contributing
 

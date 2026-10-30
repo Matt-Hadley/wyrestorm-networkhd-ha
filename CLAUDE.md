@@ -13,7 +13,7 @@ This is a Home Assistant integration for WyreStorm NetworkHD matrix switching sy
 - Catch `API_ERRORS` (`NetworkHDError`, `OSError`, `ValueError`), never match exception message strings. Commands raise `HomeAssistantError(translation_key="command_failed")`.
 
 ### Refresh Rules
-1. **Polling** is a fallback (`update_interval` option, default 60 s); `iot_class` is `local_push`.
+1. **Polling** is a fixed 60 s fallback (`DEFAULT_UPDATE_INTERVAL`; core does not allow a polling interval field, see the appropriate-polling rule); `iot_class` is `local_push`.
 2. **Notifications** (endpoint online/offline, video found/lost) call `async_request_refresh()` via a background task; HA's debouncer collapses bursts.
 3. **Matrix changes** (`async_set_matrix`) re-read only `matrix get`.
 4. **Display power**: no refresh (it does not change device status).
@@ -22,10 +22,15 @@ This is a Home Assistant integration for WyreStorm NetworkHD matrix switching sy
 7. **Matrix changes** update `self.data` and call `async_update_listeners()` (not `async_set_updated_data`, which would cancel a pending debounced refresh and reset the poll timer). The reboot button marks the coordinator failed until the next successful update.
 
 ### Devices and Entities
-- The controller device is registered in `async_setup_entry` with identifier `(DOMAIN, host)`; endpoint devices use `(DOMAIN, true_name)` and `via_device_id=coordinator.controller_device_id`.
-- The controller API exposes no MAC/serial, so the config entry unique_id is the host. Reconfigure with a new host moves the unique_id, the controller device identifier and the reboot button unique_id.
+- The controller device is registered in `async_setup_entry` with identifier `(DOMAIN, coordinator.controller_id)` (the entry unique_id when it is a MAC, else the host); endpoint devices use `(DOMAIN, true_name)`, their MAC as a connection, and `via_device_id=coordinator.controller_device_id`.
+- The SSH API exposes no MAC/serial, so the unique_id is the controller MAC (12 lowercase hex digits) from its mDNS instance name (`mdns.py`: unicast PTR query for `_workstation._tcp.local.` to host:5353, or the zeroconf discovery name). A controller that does not answer is identified by its host; `async_setup_entry` retries the lookup at every setup and then moves the unique_id, the controller device identifier and the reboot button unique_id (`async_move_controller_id`). Reconfigure keeps a MAC id (aborts `wrong_device` if the new host announces another MAC); a host id moves to the new MAC or host.
 - Endpoints missing from device status/info (usually offline) are kept: the Controller link sensor shows off, the other entities are unavailable.
+- Devices of the entry that the controller stops reporting (an endpoint removed from the controller, a controller device left from an old host) are removed after `STALE_REFRESHES` (3) successful refreshes in a row without them, never while the controller reports no endpoints at all. `async_remove_config_entry_device` lets users delete a device that is not currently reported.
+- Platforms add endpoint entities through `async_add_endpoint_entities` (entity.py): a coordinator listener adds entities for endpoints that appear after setup, and forgets endpoints whose device was removed so they are added again if they return.
 - Endpoint entities subclass `WyreStormEndpointEntity` (entity.py); names come from `translation_key` in strings.json, icons from icons.json.
+
+### Discovery
+`manifest.json` matches `_workstation._tcp.local.` instances named `nhd-*ctl*` (HA lowercases names before fnmatch). `async_step_zeroconf` takes the MAC from the instance name, updates the host of a known entry (the pinned host key stays, so another device at that address is still refused), aborts for an entry known by host, and otherwise asks for credentials in `zeroconf_confirm` (then the same TOFU host key confirmation as the user step).
 
 ### Services
 `matrix_set` (`source_device` optional = disconnect, `target_device`) and `power_control` (`devices`, `power_state`) are registered once in `async_setup` (services.py). Devices are matched by alias or true name; the controller is the one loaded entry that has all of them, or `config_entry_id` when ambiguous. Bad input raises `ServiceValidationError`.
@@ -55,7 +60,8 @@ custom_components/wyrestorm_networkhd/
 ├── coordinator.py           # Connection, polling, notifications, commands
 ├── services.py              # matrix_set / power_control
 ├── entity.py                # Base entity for endpoint devices
-├── config_flow.py           # User, reconfigure, reauth and options flows
+├── config_flow.py           # User, zeroconf, reconfigure and reauth flows
+├── mdns.py                  # Controller MAC from its mDNS name (unicast PTR lookup)
 ├── diagnostics.py           # Redacted diagnostics
 ├── const.py                 # Constants
 ├── services.yaml, strings.json, translations/en.json, icons.json

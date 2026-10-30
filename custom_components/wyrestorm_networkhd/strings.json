@@ -1,5 +1,6 @@
 {
   "config": {
+    "flow_title": "{host}",
     "step": {
       "user": {
         "title": "WyreStorm NetworkHD Controller",
@@ -37,6 +38,22 @@
           "host_key_fingerprint": "Pins the controller's SSH key so Home Assistant only sends the credentials to that controller. Get it with `ssh-keyscan -p 10022 CONTROLLER_IP | ssh-keygen -lf -` and paste the SHA256 line(s); several are allowed. Leave empty to trust the key the controller presents now (you are asked to confirm it)."
         }
       },
+      "zeroconf_confirm": {
+        "title": "WyreStorm NetworkHD controller found",
+        "description": "A NetworkHD controller was found at {host}. Enter its SSH connection details to add it.",
+        "data": {
+          "username": "Username",
+          "password": "Password",
+          "port": "Port",
+          "host_key_fingerprint": "SSH host key fingerprint (optional)"
+        },
+        "data_description": {
+          "username": "SSH username for the controller (default: wyrestorm)",
+          "password": "SSH password for the controller (default: networkhd)",
+          "port": "SSH port for the controller (default: 10022)",
+          "host_key_fingerprint": "Pins the controller's SSH key so Home Assistant only sends the credentials to that controller. Get it with `ssh-keyscan -p 10022 CONTROLLER_IP | ssh-keygen -lf -` and paste the SHA256 line(s); several are allowed. Leave empty to trust the key the controller presents now (you are asked to confirm it)."
+        }
+      },
       "confirm_host_key": {
         "title": "Trust this controller?",
         "description": "The controller identified itself with SSH host key `{fingerprint}`. Confirm to trust this controller from now on: Home Assistant will refuse to connect, and will not send the credentials, if the key changes. You can change it later with Reconfigure."
@@ -63,21 +80,10 @@
     },
     "abort": {
       "already_configured": "Device is already configured",
+      "no_mac": "The discovered controller did not announce its MAC address",
+      "wrong_device": "The controller at the new host is a different controller (another MAC address). Add it as a new integration entry instead.",
       "reauth_successful": "Re-authentication was successful",
       "reconfigure_successful": "Re-configuration was successful"
-    }
-  },
-  "options": {
-    "step": {
-      "init": {
-        "title": "WyreStorm NetworkHD Options",
-        "data": {
-          "update_interval": "Update interval (seconds)"
-        },
-        "data_description": {
-          "update_interval": "Fallback polling interval (10-300 seconds); changes are also pushed by the controller"
-        }
-      }
     }
   },
   "entity": {
@@ -104,6 +110,18 @@
   "exceptions": {
     "host_key_mismatch": {
       "message": "The controller at {host} presented SSH host key {fingerprint}, which does not match the pinned fingerprint"
+    },
+    "invalid_auth": {
+      "message": "The NetworkHD controller at {host} rejected the credentials"
+    },
+    "cannot_connect": {
+      "message": "Cannot connect to the NetworkHD controller at {host}: {error}"
+    },
+    "update_failed": {
+      "message": "Error communicating with the NetworkHD controller at {host}: {error}"
+    },
+    "rebooting": {
+      "message": "The NetworkHD controller at {host} is rebooting"
     },
     "command_failed": {
       "message": "Command to the NetworkHD controller at {host} failed: {error}"

@@ -1,0 +1,98 @@
+rules:
+  # Bronze
+  action-setup: done
+  appropriate-polling:
+    status: done
+    comment: Push (controller notifications) is primary; a fixed 60 s fallback poll, not user-configurable.
+  brands:
+    status: done
+    comment: >-
+      Custom integration: local brand/icon.png (HA 2026.3+ serves brand images from the integration), not the
+      home-assistant/brands repository.
+  common-modules: done
+  config-flow: done
+  config-flow-test-coverage: done
+  dependency-transparency:
+    status: done
+    comment: >-
+      wyrestorm-networkhd (MIT, public repository, published to PyPI from GitHub Actions with attestations). Its
+      package metadata has no license field, which core's license check would want; requirements are ranged, not
+      pinned with ==, as is usual for a custom integration.
+  docs-actions: done
+  docs-conditions:
+    status: exempt
+    comment: The integration provides no conditions.
+  docs-high-level-description: done
+  docs-installation-instructions: done
+  docs-removal-instructions: done
+  docs-triggers:
+    status: exempt
+    comment: The integration provides no triggers.
+  entity-event-setup:
+    status: exempt
+    comment: Entities do not subscribe to events; the coordinator handles controller notifications.
+  entity-unique-id:
+    status: done
+    comment: >-
+      Endpoint ids use the endpoint true name (which contains its MAC), the reboot button the controller MAC (or the
+      host until the MAC is known). The ids start with the domain, which core's linter flags; kept so existing
+      entities keep their ids.
+  has-entity-name: done
+  runtime-data: done
+  test-before-configure: done
+  test-before-setup: done
+  unique-config-entry:
+    status: done
+    comment: The controller MAC from its mDNS name; the host when the controller does not answer mDNS (retried at setup).
+
+  # Silver
+  action-exceptions: done
+  config-entry-unloading: done
+  docs-configuration-parameters:
+    status: exempt
+    comment: The integration has no options flow.
+  docs-installation-parameters: done
+  entity-unavailable: done
+  integration-owner: done
+  log-when-unavailable: done
+  parallel-updates: done
+  reauthentication-flow: done
+  test-coverage: done
+
+  # Gold
+  devices: done
+  diagnostics: done
+  discovery: done
+  discovery-update-info: done
+  docs-data-update: done
+  docs-examples: done
+  docs-known-limitations: done
+  docs-supported-devices: done
+  docs-supported-functions: done
+  docs-troubleshooting: done
+  docs-use-cases: done
+  dynamic-devices: done
+  entity-category: done
+  entity-device-class:
+    status: done
+    comment: Connectivity, running and restart where they fit; display power buttons and the source select have none that fits.
+  entity-disabled-by-default:
+    status: exempt
+    comment: >-
+      No entity is noisy or rarely used. The only diagnostic entity, Controller link, changes only when an endpoint goes
+      offline or online, and it is the only entity that shows an offline endpoint (the others become unavailable).
+  entity-translations: done
+  exception-translations: done
+  icon-translations: done
+  reconfiguration-flow: done
+  repair-issues: done
+  stale-devices: done
+
+  # Platinum
+  async-dependency:
+    status: todo
+    comment: The library uses paramiko, which blocks, in an executor thread.
+  inject-websession:
+    status: exempt
+    comment: The integration does not use HTTP; it talks to the controller over SSH.
+  strict-typing: todo
