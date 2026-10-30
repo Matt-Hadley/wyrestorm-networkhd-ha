@@ -14,7 +14,10 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_PORT, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryError, HomeAssistantError
-from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers import (
+    device_registry as dr,
+    issue_registry as ir,
+)
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from wyrestorm_networkhd import NHDAPI, HostKeyMismatchError, NetworkHDClientSSH, normalize_fingerprints
@@ -38,6 +41,7 @@ _LOGGER = logging.getLogger(__name__)
 API_ERRORS = (NetworkHDError, OSError, ValueError)
 NOTIFICATION_TYPES = ("endpoint", "video")
 DEVICE_INFO_TTL = 600  # seconds; device info (MAC, firmware, network) rarely changes
+STALE_REFRESHES = 3  # successful refreshes a device must be missing from before it is removed
 
 type WyreStormConfigEntry = ConfigEntry[WyreStormCoordinator]
 
@@ -87,11 +91,16 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
         self._device_status: list[DeviceStatus] = []  # kept for diagnostics
         self._device_info: list[DeviceInfo] = []
         self._device_info_time = -float("inf")
+        self._missing: dict[str, int] = {}  # device registry id -> consecutive refreshes without it
 
     @property
     def controller_id(self) -> str:
         """Identifier of the controller device: its MAC once known (the entry unique id), else the host."""
         return self.config_entry.unique_id or self.host
+
+    def device_ids(self, data: CoordinatorData) -> set[str]:
+        """Return the identifiers of the devices the controller currently reports, itself included."""
+        return {self.controller_id, *data.device_transmitters, *data.device_receivers}
 
     async def _async_setup(self) -> None:
         """Connect and subscribe to notifications (runs once before the first refresh)."""
@@ -175,7 +184,7 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
         async with self._lock:
             try:
                 await self._ensure_connected()
-                return await self._fetch()
+                data = await self._fetch()
             except HostKeyMismatchError as err:
                 # Keep polling (the key is rejected before login) so a returning pinned key recovers on its own.
                 raise self._host_key_mismatch(UpdateFailed, err) from err
@@ -186,6 +195,29 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 with suppress(*API_ERRORS):
                     await self.client.disconnect()
                 raise self._error(UpdateFailed, "update_failed", error=str(err)) from err
+        self._remove_stale_devices(data)
+        return data
+
+    def _remove_stale_devices(self, data: CoordinatorData) -> None:
+        """Remove devices of this entry the controller has stopped reporting (removed endpoints, an old controller id).
+
+        The controller lists every endpoint it knows, offline ones included. A device goes only after it is
+        missing from STALE_REFRESHES successful refreshes in a row, and never while the controller reports no
+        endpoints at all (as it may while it starts).
+        """
+        if not (data.device_transmitters or data.device_receivers):
+            return
+        current = self.device_ids(data)
+        dev_reg = dr.async_get(self.hass)
+        for device in dr.async_entries_for_config_entry(dev_reg, self.config_entry.entry_id):
+            if any(domain == DOMAIN and name in current for domain, name in device.identifiers):
+                self._missing.pop(device.id, None)
+            elif (missing := self._missing.get(device.id, 0) + 1) < STALE_REFRESHES:
+                self._missing[device.id] = missing
+            else:
+                _LOGGER.info("Removing device %s: the controller at %s no longer reports it", device.name, self.host)
+                dev_reg.async_remove_device(device.id)
+                del self._missing[device.id]
 
     async def _fetch(self) -> CoordinatorData:
         query = self.api.api_query

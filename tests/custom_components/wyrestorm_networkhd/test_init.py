@@ -26,6 +26,7 @@ from wyrestorm_networkhd.exceptions import (
 from wyrestorm_networkhd.models.api_notifications import NotificationEndpoint, NotificationVideo
 from wyrestorm_networkhd.models.api_query import DeviceJsonString, Matrix
 
+from custom_components.wyrestorm_networkhd import async_remove_config_entry_device
 from custom_components.wyrestorm_networkhd.const import CONF_HOST_KEY_FINGERPRINT, DOMAIN
 from custom_components.wyrestorm_networkhd.diagnostics import async_get_config_entry_diagnostics
 
@@ -575,3 +576,78 @@ async def test_new_endpoint_added_without_reload(
     assert len(er.async_entries_for_config_entry(er.async_get(hass), config_entry.entry_id)) == len(
         [e for p in EXPECTED_ENTITIES.values() for e in p]
     )
+
+
+async def test_removed_endpoint_device_removed_and_comes_back(
+    hass: HomeAssistant, setup_integration: MockConfigEntry, mock_client: MagicMock, freezer: FrozenDateTimeFactory
+) -> None:
+    """An endpoint the controller stops listing is removed after 3 refreshes; if it returns it is added again."""
+    entry = setup_integration
+    dev_reg, ent_reg = dr.async_get(hass), er.async_get(hass)
+    rx1 = (DOMAIN, "NHD-400-RX-E4CE02BB0001")
+    query = mock_client.api.api_query
+    full = {m: getattr(query, m).return_value for m in ("config_get_devicejsonstring", "config_get_device_status")}
+    drop_endpoint(query, "Display1")
+
+    await poll(hass, freezer, 2)
+    assert dev_reg.async_get_device_by_identifier(rx1, entry.entry_id)
+    assert hass.states.get(LINK_RX1).state == STATE_UNAVAILABLE
+
+    await poll(hass, freezer)
+    assert dev_reg.async_get_device_by_identifier(rx1, entry.entry_id) is None
+    assert ent_reg.async_get(LINK_RX1) is None
+    assert hass.states.get(LINK_RX1) is None
+    assert "Display1" not in hass.states.get("select.receiver_display2_input_source").attributes.get("options", [])
+    assert dev_reg.async_get_device_by_identifier((DOMAIN, HOST), entry.entry_id)  # the controller stays
+
+    for method, value in full.items():
+        getattr(query, method).return_value = value
+    await poll(hass, freezer)
+    assert dev_reg.async_get_device_by_identifier(rx1, entry.entry_id)
+    assert hass.states.get(LINK_RX1).state == STATE_ON
+
+
+async def test_old_controller_device_removed(
+    hass: HomeAssistant, setup_integration: MockConfigEntry, freezer: FrozenDateTimeFactory
+) -> None:
+    """A controller device left from an old host (with its reboot button) is removed as stale."""
+    entry = setup_integration
+    dev_reg, ent_reg = dr.async_get(hass), er.async_get(hass)
+    orphan = dev_reg.async_get_or_create(config_entry_id=entry.entry_id, identifiers={(DOMAIN, "192.0.2.99")})
+    button = ent_reg.async_get_or_create(
+        Platform.BUTTON, DOMAIN, f"{DOMAIN}_192.0.2.99_controller_reboot", config_entry=entry, device_id=orphan.id
+    )
+    await poll(hass, freezer, 3)
+    assert dev_reg.async_get(orphan.id) is None
+    assert ent_reg.async_get(button.entity_id) is None
+    assert hass.states.get(REBOOT)
+
+
+async def test_no_endpoints_reported_removes_nothing(
+    hass: HomeAssistant, setup_integration: MockConfigEntry, mock_client: MagicMock, freezer: FrozenDateTimeFactory
+) -> None:
+    """A controller that reports no endpoints at all (e.g. while it starts) does not empty the registry."""
+    entry = setup_integration
+    query = mock_client.api.api_query
+    for method in ("config_get_devicejsonstring", "config_get_device_status", "config_get_device_info"):
+        getattr(query, method).return_value = []
+    devices = len(dr.async_entries_for_config_entry(dr.async_get(hass), entry.entry_id))
+    await poll(hass, freezer, 4)
+    assert len(dr.async_entries_for_config_entry(dr.async_get(hass), entry.entry_id)) == devices
+
+
+async def test_remove_device_manually(
+    hass: HomeAssistant, setup_integration: MockConfigEntry, mock_client: MagicMock, freezer: FrozenDateTimeFactory
+) -> None:
+    """Users can delete a device the controller no longer reports, but not a current one or the controller."""
+    entry = setup_integration
+    assert entry.supports_remove_device
+    dev_reg = dr.async_get(hass)
+    rx1 = dev_reg.async_get_device_by_identifier((DOMAIN, "NHD-400-RX-E4CE02BB0001"), entry.entry_id)
+    controller = dev_reg.async_get_device_by_identifier((DOMAIN, HOST), entry.entry_id)
+    assert not await async_remove_config_entry_device(hass, entry, rx1)
+    assert not await async_remove_config_entry_device(hass, entry, controller)
+
+    drop_endpoint(mock_client.api.api_query, "Display1")
+    await poll(hass, freezer)
+    assert await async_remove_config_entry_device(hass, entry, rx1)

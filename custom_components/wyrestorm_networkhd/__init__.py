@@ -61,6 +61,14 @@ async def async_unload_entry(hass: HomeAssistant, entry: WyreStormConfigEntry) -
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 
+async def async_remove_config_entry_device(
+    hass: HomeAssistant, entry: WyreStormConfigEntry, device_entry: dr.DeviceEntry
+) -> bool:
+    """Let the user delete a device the controller no longer reports (never a current one)."""
+    current = entry.runtime_data.device_ids(entry.runtime_data.data)
+    return not any(domain == DOMAIN and name in current for domain, name in device_entry.identifiers)
+
+
 async def async_remove_entry(hass: HomeAssistant, entry: WyreStormConfigEntry) -> None:
     """Delete the entry's host key repair issue when the entry is removed."""
     ir.async_delete_issue(hass, DOMAIN, f"host_key_mismatch_{entry.entry_id}")
