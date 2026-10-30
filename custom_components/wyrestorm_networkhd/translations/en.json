@@ -110,7 +110,7 @@
         },
         "source_device": {
           "name": "Source device",
-          "description": "Transmitter alias or true name. Leave empty to disconnect the receivers."
+          "description": "Transmitter alias or true name. Leave out to disconnect the receivers."
         },
         "target_device": {
           "name": "Target devices",

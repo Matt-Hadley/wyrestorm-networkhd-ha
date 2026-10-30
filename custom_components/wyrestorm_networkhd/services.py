@@ -22,12 +22,12 @@ from .const import (
 )
 from .coordinator import WyreStormCoordinator
 
-_NAMES = vol.All(cv.ensure_list, [cv.string])
+_NAMES = vol.All(cv.ensure_list, [cv.string], vol.Length(min=1))
 
 MATRIX_SET_SCHEMA = vol.Schema(
     {
         vol.Optional(ATTR_CONFIG_ENTRY_ID): cv.string,
-        vol.Optional(ATTR_SOURCE_DEVICE): vol.Any(None, cv.string),
+        vol.Optional(ATTR_SOURCE_DEVICE): vol.All(cv.string, vol.Length(min=1)),  # omit to disconnect
         vol.Required(ATTR_TARGET_DEVICE): _NAMES,
     }
 )
