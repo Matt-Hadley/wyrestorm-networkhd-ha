@@ -7,8 +7,9 @@ from collections.abc import Mapping
 from contextlib import suppress
 from typing import Any
 
-import voluptuous as vol
+import probatio as vol
 from homeassistant.config_entries import (
+    SOURCE_REAUTH,
     SOURCE_RECONFIGURE,
     ConfigFlow,
     ConfigFlowResult,
@@ -35,8 +36,14 @@ from .mdns import async_lookup_mac, is_mac, mac_from_name
 _LOGGER = logging.getLogger(__name__)
 
 
-def get_config_schema(defaults: dict[str, Any] | None = None, *, with_host: bool = True) -> vol.Schema:
-    """Get the connection schema with optional defaults (without the host field for a discovered controller)."""
+def get_config_schema(
+    defaults: dict[str, Any] | None = None, *, with_host: bool = True, keep_password: bool = False
+) -> vol.Schema:
+    """Get the connection schema with optional defaults (without the host field for a discovered controller).
+
+    With `keep_password` (reconfigure) the password has no default, so the stored one is never sent to the
+    frontend; leaving it empty keeps it.
+    """
     defaults = defaults or {}
     fingerprint = defaults.get(CONF_HOST_KEY_FINGERPRINT) or ""
     if not isinstance(fingerprint, str):  # stored entry data holds a list
@@ -46,7 +53,9 @@ def get_config_schema(defaults: dict[str, Any] | None = None, *, with_host: bool
         {
             **host,
             vol.Required(CONF_USERNAME, default=defaults.get(CONF_USERNAME, DEFAULT_USERNAME)): str,
-            vol.Required(CONF_PASSWORD, default=defaults.get(CONF_PASSWORD, DEFAULT_PASSWORD)): str,
+            vol.Optional(CONF_PASSWORD)
+            if keep_password
+            else vol.Required(CONF_PASSWORD, default=defaults.get(CONF_PASSWORD, DEFAULT_PASSWORD)): str,
             vol.Optional(CONF_PORT, default=defaults.get(CONF_PORT, DEFAULT_PORT)): int,
             # suggested_value (not default) so clearing the field removes the pin.
             vol.Optional(CONF_HOST_KEY_FINGERPRINT, description={"suggested_value": fingerprint}): TextSelector(
@@ -107,7 +116,8 @@ class WyreStormConfigFlow(ConfigFlow, domain=DOMAIN):
         except HostKeyMismatchError as err:
             _LOGGER.debug("Host key mismatch for %s: %s", data[CONF_HOST], err)
             self._placeholders["fingerprint"] = err.presented_fingerprint
-            return {"base": "host_key_mismatch"}
+            # Reauth has no fingerprint field: the key is changed with Reconfigure.
+            return {"base": "host_key_mismatch_reauth" if self.source == SOURCE_REAUTH else "host_key_mismatch"}
         except API_ERRORS as err:
             _LOGGER.debug("Cannot connect to %s: %s", data[CONF_HOST], err)
             return {"base": "cannot_connect"}
@@ -128,7 +138,9 @@ class WyreStormConfigFlow(ConfigFlow, domain=DOMAIN):
             return await self.async_step_confirm_host_key()
         return self.async_show_form(
             step_id=step_id,
-            data_schema=get_config_schema(user_input, with_host=step_id != "zeroconf_confirm"),
+            data_schema=get_config_schema(
+                user_input, with_host=step_id != "zeroconf_confirm", keep_password=step_id == "reconfigure"
+            ),
             errors=errors,
             description_placeholders=self._placeholders,
         )
@@ -145,7 +157,7 @@ class WyreStormConfigFlow(ConfigFlow, domain=DOMAIN):
         if self.source != SOURCE_RECONFIGURE:
             return self.async_create_entry(title=f"WyreStorm NetworkHD ({host})", data=data)
         entry = self._get_reconfigure_entry()
-        if (new_id := self.unique_id or entry.unique_id) != entry.unique_id:
+        if (new_id := self.unique_id or entry.unique_id) and new_id != entry.unique_id:
             async_move_controller_id(self.hass, entry, new_id)
         # data (not data_updates) so a cleared fingerprint is removed.
         return self.async_update_reload_and_abort(
@@ -194,9 +206,11 @@ class WyreStormConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is None:
             return self.async_show_form(
                 step_id="reconfigure",
-                data_schema=get_config_schema(dict(entry.data)),
+                data_schema=get_config_schema(dict(entry.data), keep_password=True),
                 description_placeholders=self._placeholders,
             )
+        if not user_input.get(CONF_PASSWORD):  # empty: keep the stored password
+            user_input = {k: v for k, v in user_input.items() if k != CONF_PASSWORD}
         if (host := user_input[CONF_HOST]) != entry.data[CONF_HOST]:
             mac = await async_lookup_mac(host)
             if is_mac(entry.unique_id):

@@ -1,0 +1,3 @@
+CHANGELOG.md
+# release-please re-serialises it when bumping the version
+custom_components/wyrestorm_networkhd/manifest.json

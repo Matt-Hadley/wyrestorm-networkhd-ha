@@ -13,7 +13,7 @@ from typing import Any, Literal
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_PORT, CONF_USERNAME
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryError, HomeAssistantError
+from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
 from homeassistant.helpers import (
     device_registry as dr,
     issue_registry as ir,
@@ -22,7 +22,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from wyrestorm_networkhd import NHDAPI, HostKeyMismatchError, NetworkHDClientSSH, normalize_fingerprints
 from wyrestorm_networkhd.exceptions import AuthenticationError, NetworkHDError
-from wyrestorm_networkhd.models.api_query import DeviceInfo, DeviceStatus, Matrix
+from wyrestorm_networkhd.models.api_query import DeviceInfo, DeviceStatus, Matrix, Version
 
 from ._utils_coordinator import build_device_collections
 from .const import (
@@ -41,7 +41,7 @@ _LOGGER = logging.getLogger(__name__)
 # Library errors subclass NetworkHDError; OSError/ValueError catch anything the transport or parsers raise raw.
 API_ERRORS = (NetworkHDError, OSError, ValueError)
 NOTIFICATION_TYPES = ("endpoint", "video")
-DEVICE_INFO_TTL = 600  # seconds; device info (MAC, firmware, network) rarely changes
+DEVICE_INFO_TTL = 600  # seconds; device info and the controller version (MAC, firmware, network) rarely change
 STALE_REFRESHES = 3  # successful refreshes a device must be missing from before it is removed
 
 type WyreStormConfigEntry = ConfigEntry[WyreStormCoordinator]
@@ -87,10 +87,11 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
         self.host: str = entry.data[CONF_HOST]
         self.client = create_client(dict(entry.data))
         self.api: NHDAPI
-        self.controller_device_id: str | None = None  # device registry id, set in async_setup_entry
+        self.controller_device_id: str  # device registry id, set in async_setup_entry
         self._lock = asyncio.Lock()  # one command/response exchange at a time
         self._device_status: list[DeviceStatus] = []  # kept for diagnostics
         self._device_info: list[DeviceInfo] = []
+        self._version: Version  # read with the device info
         self._device_info_time = -float("inf")
         self._missing: dict[str, int] = {}  # device registry id -> consecutive refreshes without it
 
@@ -112,7 +113,8 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
         try:
             await self._connect()
         except HostKeyMismatchError as err:
-            raise self._host_key_mismatch(ConfigEntryError, err) from err  # no retries until reconfigured
+            # Retried (the key is rejected before login), so a zeroconf host update or a returning key recovers.
+            raise self._host_key_mismatch(UpdateFailed, err) from err
         except AuthenticationError as err:
             raise self._error(ConfigEntryAuthFailed, "invalid_auth") from err
         except API_ERRORS as err:
@@ -175,6 +177,7 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
             )
             raise
         ir.async_delete_issue(self.hass, DOMAIN, issue_id)
+        self._device_info_time = -float("inf")  # re-read device info and version after a reconnect (e.g. a reboot)
         # Entries from 1.0.x have no pinned key: trust the one presented now (TOFU).
         if CONF_HOST_KEY_FINGERPRINT not in entry.data and (fingerprint := self.client.host_key_fingerprint):
             self.hass.config_entries.async_update_entry(
@@ -200,7 +203,22 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
                     await self.client.disconnect()
                 raise self._error(UpdateFailed, "update_failed", error=str(err)) from err
         self._remove_stale_devices(data)
+        self._update_devices(data)
         return data
+
+    def _update_devices(self, data: CoordinatorData) -> None:
+        """Follow alias renames and firmware updates in the device registry (entities set them only when added)."""
+        dev_reg = dr.async_get(self.hass)
+        entry_id = self.config_entry.entry_id
+        if controller := dev_reg.async_get_device_by_identifier((DOMAIN, self.controller_id), entry_id):
+            dev_reg.async_update_device(controller.id, sw_version=data.version.core_version)
+        for endpoint in [*data.device_transmitters.values(), *data.device_receivers.values()]:
+            if device := dev_reg.async_get_device_by_identifier((DOMAIN, endpoint.true_name), entry_id):
+                dev_reg.async_update_device(
+                    device.id,
+                    name=endpoint.get_device_display_name(),
+                    sw_version=endpoint.version or device.sw_version,  # keep the last known while offline
+                )
 
     def _remove_stale_devices(self, data: CoordinatorData) -> None:
         """Remove devices of this entry the controller has stopped reporting (removed endpoints, an old controller id).
@@ -225,19 +243,17 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
     async def _fetch(self) -> CoordinatorData:
         query = self.api.api_query
-        version = await query.config_get_version()
         device_json_list = await query.config_get_devicejsonstring()
         self._device_status = await query.config_get_device_status()
         if time.monotonic() - self._device_info_time > DEVICE_INFO_TTL:
+            self._version = await query.config_get_version()
             self._device_info = await query.config_get_device_info()
             self._device_info_time = time.monotonic()
         matrix = await query.matrix_get()
 
-        transmitters, receivers = build_device_collections(
-            device_json_list or [], self._device_status or [], self._device_info or []
-        )
+        transmitters, receivers = build_device_collections(device_json_list, self._device_status, self._device_info)
         return CoordinatorData(
-            version=version,
+            version=self._version,
             device_transmitters=transmitters,
             device_receivers=receivers,
             matrix_assignments=_assignments(matrix),

@@ -15,9 +15,9 @@ rules:
   dependency-transparency:
     status: done
     comment: >-
-      wyrestorm-networkhd (MIT, public repository, published to PyPI from GitHub Actions with attestations). Its
-      package metadata has no license field, which core's license check would want; requirements are ranged, not
-      pinned with ==, as is usual for a custom integration.
+      wyrestorm-networkhd (MIT, public repository, published to PyPI from GitHub Actions with attestations). Its package
+      metadata has no license field, which core's license check would want; requirements are ranged, not pinned with ==,
+      as is usual for a custom integration.
   docs-actions: done
   docs-conditions:
     status: exempt
@@ -35,15 +35,16 @@ rules:
     status: done
     comment: >-
       Endpoint ids use the endpoint true name (which contains its MAC), the reboot button the controller MAC (or the
-      host until the MAC is known). The ids start with the domain, which core's linter flags; kept so existing
-      entities keep their ids.
+      host until the MAC is known). The ids start with the domain, which core's linter flags; kept so existing entities
+      keep their ids.
   has-entity-name: done
   runtime-data: done
   test-before-configure: done
   test-before-setup: done
   unique-config-entry:
     status: done
-    comment: The controller MAC from its mDNS name; the host when the controller does not answer mDNS (retried at setup).
+    comment:
+      The controller MAC from its mDNS name; the host when the controller does not answer mDNS (retried at setup).
 
   # Silver
   action-exceptions: done
@@ -75,7 +76,8 @@ rules:
   entity-category: done
   entity-device-class:
     status: done
-    comment: Connectivity, running and restart where they fit; display power buttons and the source select have none that fits.
+    comment:
+      Connectivity, running and restart where they fit; display power buttons and the source select have none that fits.
   entity-disabled-by-default:
     status: exempt
     comment: >-
@@ -95,4 +97,7 @@ rules:
   inject-websession:
     status: exempt
     comment: The integration does not use HTTP; it talks to the controller over SSH.
-  strict-typing: todo
+  strict-typing:
+    status: done
+    comment:
+      mypy --strict (pyproject.toml) runs in make check and CI, against the installed Home Assistant and library types.

@@ -7,7 +7,7 @@ name = "wyrestorm-networkhd-ha"
 dynamic = ["version"]
 description = "Home Assistant integration for WyreStorm NetworkHD matrix switching and device control"
 requires-python = ">=3.14"
-dependencies = ["voluptuous>=0.13.0", "wyrestorm-networkhd>=3.1.0,<4"]
+dependencies = ["wyrestorm-networkhd>=3.1.0,<4"]
 keywords = [
     "wyrestorm",
     "networkhd",
@@ -42,10 +42,8 @@ dev = [
     "pytest>=9.0.0",
     "pytest-cov",
     "pytest-asyncio",
-    "pytest-mock>=3.17.0",
     "pytest-homeassistant-custom-component>=0.13.375",
     "bandit[toml]>=1.9.0",
-    "pip-audit>=2.6.0",
     "mypy>=2.0.0",
     "pre-commit>=3.6.0",
     "vulture>=2.1.4",
@@ -53,7 +51,6 @@ dev = [
 ]
 
 [tool.setuptools_scm]
-write_to = "custom_components/wyrestorm_networkhd/_version.py"
 tag_regex = "^v(?P<version>[^\\+]+)(?:\\+(?P<local>.*))?$"
 git_describe_command = [
     "git",
@@ -76,7 +73,6 @@ exclude = [
     "__pycache__",
     "htmlcov",
     ".pytest_cache",
-    "custom_components/wyrestorm_networkhd/_version.py",
 ]
 # Markdown code blocks are left to Prettier
 extend-exclude = ["*.md"]
@@ -130,12 +126,6 @@ addopts = [
     "--durations=10",
     "--tb=short",
 ]
-markers = [
-    "unit: marks tests as unit tests (deselect with '-m \"not unit\"')",
-    "integration: marks tests as integration tests (deselect with '-m \"not integration\"')",
-    "performance: marks tests as performance tests (deselect with '-m \"not performance\"')",
-    "asyncio: marks tests as async tests",
-]
 
 # Coverage configuration
 [tool.coverage.run]
@@ -145,7 +135,6 @@ omit = [
     "*/tests/*",
     "*/__pycache__/*",
     "*/site-packages/*",
-    "custom_components/wyrestorm_networkhd/_version.py",
 ]
 
 [tool.coverage.html]
@@ -178,9 +167,11 @@ exclude = [
     "build",
     "dist",
 ]
+strict = true
 # Additional mypy options to handle external dependencies
 ignore_missing_imports = true
-# Exclude specific problematic modules
+
+# zeroconf imports its DNS classes into the package (no __all__ entry), where mdns.py imports them from.
 [[tool.mypy.overrides]]
-module = "homeassistant.*"
-ignore_missing_imports = true
+module = "zeroconf"
+implicit_reexport = true

@@ -8,8 +8,6 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write
-  checks: write
 
 concurrency:
   group: pr-validation-${{ github.event.pull_request.number }}
@@ -21,9 +19,10 @@ jobs:
     if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    outputs:
-      coverage: ${{ steps.coverage.outputs.coverage }}
-      coverage-color: ${{ steps.coverage.outputs.color }}
+    permissions:
+      contents: read
+      pull-requests: write # coverage comment
+      checks: write # coverage check run
 
     steps:
       - name: Checkout code
@@ -32,24 +31,14 @@ jobs:
           fetch-depth: 0
 
       - name: Setup environment
-        id: setup
         uses: ./.github/actions/setup-environment
-
-      - name: Cache dependencies
-        uses: actions/cache@v6
-        with:
-          path: |
-            ~/.cache/pip
-          key: ${{ runner.os }}-python-${{ hashFiles('pyproject.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-python-
 
       - name: Run health check
         run: make health-check
 
       - name: Coverage report
         continue-on-error: true
-        uses: 5monkeys/cobertura-action@v14
+        uses: 5monkeys/cobertura-action@ee5787cc56634acddedc51f21c7947985531e6eb # v14
         with:
           path: coverage.xml
           repo_token: ${{ secrets.GITHUB_TOKEN }}
@@ -60,6 +49,7 @@ jobs:
           only_changed_files: false
 
       - name: Upload PR artifacts
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: pr-artifacts-${{ github.event.number }}
@@ -74,15 +64,15 @@ jobs:
     if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
 
       - name: HACS validation
-        uses: hacs/action@main
+        uses: hacs/action@1ebf01c408f29afcb6406bd431bc98fd8cbb15aa # main @ 2026-06-08
         with:
           category: "integration"
 
       - name: Hassfest validation
-        uses: home-assistant/actions/hassfest@master
+        uses: home-assistant/actions/hassfest@86d4564712fa02543c808e3a693dd04f9d3f8361 # master @ 2026-10-26

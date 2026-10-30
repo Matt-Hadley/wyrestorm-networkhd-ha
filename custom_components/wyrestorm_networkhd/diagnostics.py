@@ -12,8 +12,20 @@ from homeassistant.core import HomeAssistant
 from .const import CONF_HOST_KEY_FINGERPRINT
 from .coordinator import WyreStormConfigEntry
 
-# The host is also the unique id and part of the title.
-TO_REDACT = {CONF_HOST, CONF_PASSWORD, CONF_USERNAME, "unique_id", "title", "ip", "ip4addr", "gateway", "mac"}
+# The host is also the unique id and part of the title; discovery_keys hold the zeroconf name and address.
+# MACs are redacted where they are a field; endpoint true names (NHD-400-RX-<MAC>) are kept, being the device keys.
+TO_REDACT = {
+    CONF_HOST,
+    CONF_PASSWORD,
+    CONF_USERNAME,
+    "unique_id",
+    "title",
+    "discovery_keys",
+    "ip",
+    "ip4addr",
+    "gateway",
+    "mac",
+}
 
 
 async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: WyreStormConfigEntry) -> dict[str, Any]:

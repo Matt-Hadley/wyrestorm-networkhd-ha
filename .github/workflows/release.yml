@@ -6,13 +6,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: write
-  pull-requests: write
-  issues: write # For labels
-  id-token: write # For attestations
-  attestations: write
-  checks: write
-  pages: write # For GitHub Pages
+  contents: read
 
 concurrency:
   group: release-${{ github.ref }}
@@ -23,18 +17,20 @@ jobs:
     name: Release Please
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write # labels
     outputs:
       releases_created: ${{ steps.release.outputs.releases_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
-      version: ${{ steps.release.outputs.version }}
     steps:
-      - uses: googleapis/release-please-action@v5
+      # Configured by release-please-config.json and .release-please-manifest.json
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         id: release
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          release-type: python
-          include-component-in-tag: false
-          
+
       - name: Debug Release Please outputs
         run: |
           echo "Releases created: '${{ steps.release.outputs.releases_created }}'"
@@ -55,14 +51,12 @@ jobs:
           ref: ${{ needs.release-please.outputs.tag_name }}
 
       - name: HACS validation
-        continue-on-error: true
-        uses: hacs/action@main
+        uses: hacs/action@1ebf01c408f29afcb6406bd431bc98fd8cbb15aa # main @ 2026-06-08
         with:
           category: "integration"
 
       - name: Hassfest validation
-        continue-on-error: true
-        uses: home-assistant/actions/hassfest@master
+        uses: home-assistant/actions/hassfest@86d4564712fa02543c808e3a693dd04f9d3f8361 # master @ 2026-10-26
 
   publish:
     name: Build & Publish Release
@@ -71,6 +65,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: release
+    permissions:
+      contents: write # release assets
+      id-token: write # attestations
+      attestations: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -79,15 +77,6 @@ jobs:
 
       - name: Setup environment
         uses: ./.github/actions/setup-environment
-
-      - name: Cache dependencies
-        uses: actions/cache@v6
-        with:
-          path: |
-            ~/.cache/pip
-          key: ${{ runner.os }}-python-${{ hashFiles('pyproject.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-python-
 
       - name: Run health check
         run: make health-check
@@ -116,7 +105,7 @@ jobs:
 
       - name: Update coverage badge
         continue-on-error: true
-        uses: schneegans/dynamic-badges-action@v1.9.0
+        uses: schneegans/dynamic-badges-action@28b0fa8bdeb46170ac397105ece0c1fe58f68910 # v1.9.0
         with:
           auth: ${{ secrets.GIST_SECRET }}
           gistID: ${{ secrets.GIST_ID }}
@@ -128,15 +117,6 @@ jobs:
           minColorRange: 0
           namedLogo: pytest
 
-      - name: Update version in manifest.json
-        run: |
-          VERSION="${{ needs.release-please.outputs.version }}"
-          
-          # Update manifest.json
-          jq --arg version "$VERSION" '.version = $version' \
-            custom_components/wyrestorm_networkhd/manifest.json > manifest.tmp
-          mv manifest.tmp custom_components/wyrestorm_networkhd/manifest.json
-
       - name: Create release zip
         run: |
           # Create HACS-compatible zip (files at root level)
@@ -146,10 +126,9 @@ jobs:
             -x "*__pycache__*" \
             -x "*.DS_Store" \
             -x ".DS_Store" \
-            -x "._*" \
-            -x "*_version.py"
+            -x "._*"
           cd ../..
-          
+
           # Also create a full bundle
           zip -r wyrestorm-networkhd-ha.zip \
             custom_components/wyrestorm_networkhd/ \
@@ -160,11 +139,10 @@ jobs:
             -x "*__pycache__*" \
             -x "*.DS_Store" \
             -x "*/.DS_Store" \
-            -x "*/._*" \
-            -x "*_version.py"
+            -x "*/._*"
 
       - name: Upload release assets
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           tag_name: ${{ needs.release-please.outputs.tag_name }}
           files: |
@@ -178,4 +156,3 @@ jobs:
         uses: actions/attest-build-provenance@v4
         with:
           subject-path: "*.zip"
-

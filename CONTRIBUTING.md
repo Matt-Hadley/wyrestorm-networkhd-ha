@@ -59,7 +59,7 @@ Fixture data must stay anonymised: documentation IP addresses (192.0.2.0/24), ma
 ```bash
 make format   # Ruff format + autofix
 make lint     # Ruff lint
-make check    # lint, MyPy, Vulture, Bandit
+make check    # Ruff lint, MyPy (strict), Prettier (needs Node.js), Vulture, Bandit; fails on any error
 make help     # all targets
 ```
 
@@ -74,7 +74,8 @@ function signatures and docstrings on public methods.
 ## Pull requests
 
 1. Branch from `main` (`feat/...`, `fix/...`, `docs/...`).
-2. Add or update tests for your change and make sure `make test` and `make check` pass.
+2. Add or update tests for your change and make sure `make test` and `make check` pass. CI runs the same checks
+   (`make health-check`, plus HACS and hassfest validation), and `main` requires them to pass before merging.
 3. Use [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`, `test:`, `chore:`, with
    `!` for breaking changes). Release Please uses them to version releases and write the changelog.
 4. Open a pull request against `main`.

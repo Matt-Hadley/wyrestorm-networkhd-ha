@@ -16,4 +16,5 @@
 
 ---
 
-**Note**: This PR will automatically run checks and build a test package.
+**Note**: The Quality Checks & Tests and HACS Validation checks run on this PR and must pass before it can be merged
+(release-please's release PRs are merged with an admin bypass, since its token doesn't trigger CI).

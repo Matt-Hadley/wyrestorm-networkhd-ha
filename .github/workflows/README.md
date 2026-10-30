@@ -8,43 +8,48 @@ GitHub Actions workflows for Home Assistant custom integration.
 
 **Pull Requests:**
 
-- Complete health check (`make health-check`) including:
-  - Configuration validation
-  - Code formatting and quality checks (Ruff, MyPy)
-  - Security audits and dependency checks
-  - Comprehensive testing with coverage
-  - Home Assistant component validation
-- HACS validation for integration compliance
-- Hassfest validation for HA standards
-- Coverage reporting with PR comments
-- Artifact uploads (test reports, coverage)
+- **Quality Checks & Tests** job: `make health-check`, which runs
+  - Ruff format check and lint
+  - MyPy (strict) against the installed Home Assistant and library types
+  - Prettier check of JSON, YAML and Markdown
+  - Vulture (dead code) and Bandit (security)
+  - the tests with coverage (`coverage.xml`, `htmlcov/`)
+  - project structure and version checks
+- Coverage comment on the PR, and the reports uploaded as artifacts
+- **HACS Validation** job: HACS action and hassfest
+
+Every check fails the job on errors. `main` is protected: a pull request needs the **Quality Checks & Tests** and **HACS
+Validation** checks to pass before it is merged. The release PR that release-please opens is the exception: it is
+created with the workflow token, which doesn't trigger CI, so it is merged with an admin bypass after its changelog is
+checked.
 
 ### `release.yml` - Release Management
 
 **Main Branch:**
 
-- Automated release creation via [release-please](https://github.com/googleapis/release-please-action)
+- Automated release creation via [release-please](https://github.com/googleapis/release-please-action), configured by
+  `release-please-config.json` and `.release-please-manifest.json`
+- HACS and hassfest validation of the release tag (a failure stops the release)
 - Complete health check validation
 - Coverage badge updates
 - HACS integration zip creation
-- GitHub release with distribution files (.zip)
-- Post-release HACS and Hassfest validation
+- GitHub release with distribution files (.zip) and build provenance attestations
 
 **_How Release-Please Works:_**
 
 1. **Analyzes commits** since last release using conventional commit format
-2. **Creates release PR** with updated changelog and version bump
+2. **Creates release PR** with updated changelog and the version bumped in `manifest.json`
 3. **Merging the PR** triggers the actual release workflow:
+   - Validates the tag with HACS and hassfest
    - Runs full validation suite
    - Updates coverage badge with released code coverage
-   - Updates manifest.json version
    - Creates integration zip files for HACS
    - Creates GitHub release with assets
-   - Validates HACS compliance post-release
 
 **Notes:**
 
-- Dependency updates handled by Dependabot (see `.github/dependabot.yml`)
+- Dependency updates handled by Dependabot (see `.github/dependabot.yml`), including the SHA-pinned actions
+- Workflows default to read-only permissions; each job grants only what it uses
 - Integration published as zip files for HACS (not PyPI)
 
 ## Required Secrets
@@ -87,16 +92,15 @@ git push origin breaking-branch
 
 ## Home Assistant Specific
 
-- **HACS Integration**: Automatic validation on PR and post-release
+- **HACS Integration**: Validation on every PR and before each release
 - **Hassfest Validation**: Home Assistant component standards compliance
-- **Manifest Version**: Automatically updated during releases
+- **Manifest Version**: Bumped by release-please in the release PR
 - **Integration Zip**: Created for HACS distribution
 
 ## Monitoring
 
 - **GitHub Actions Tab**: View workflow runs
-- **Status Checks**: Required for PR merging
-- **HACS Validation**: Ensures integration compliance
+- **Required status checks**: Quality Checks & Tests and HACS Validation must pass to merge into `main`
 - **Artifacts**: Download test packages and reports
 
 ## Resources
