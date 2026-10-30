@@ -50,9 +50,9 @@ repos:
         pass_filenames: false
         always_run: true
 
-      - id: test-unit
-        name: run unit tests (via Makefile)
-        entry: make test-unit
+      - id: test
+        name: run tests (via Makefile)
+        entry: make test
         language: system
         types: [python]
         pass_filenames: false

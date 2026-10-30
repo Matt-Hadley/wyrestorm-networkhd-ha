@@ -17,6 +17,8 @@ MYPY := $(shell if [ -x "$(VENV_BIN)/mypy" ]; then echo "$(VENV_BIN)/mypy"; else
 BANDIT := $(shell if [ -x "$(VENV_BIN)/bandit" ]; then echo "$(VENV_BIN)/bandit"; else echo "bandit"; fi)
 PYTEST := $(shell if [ -x "$(VENV_BIN)/pytest" ]; then echo "$(VENV_BIN)/pytest"; else echo "pytest"; fi)
 PRE_COMMIT := $(shell if [ -x "$(VENV_BIN)/pre-commit" ]; then echo "$(VENV_BIN)/pre-commit"; else echo "pre-commit"; fi)
+VULTURE := $(shell if [ -x "$(VENV_BIN)/vulture" ]; then echo "$(VENV_BIN)/vulture"; else echo "vulture"; fi)
+PRETTIER := npx -y prettier@3.3.3
 
 # Better Python detection
 PYTHON3 := $(shell command -v python3 2> /dev/null || echo "python3")
@@ -48,8 +50,8 @@ endif
 # Phony targets
 .PHONY: help \
         install install-deps create-venv update-deps \
-        test test-cov test-unit test-integration test-watch \
-        format format-code format-check lint type-check \
+        test test-cov test-watch \
+        format format-code format-check prettier-check lint type-check \
         security-check code-quality check \
         clean clean-all clean-build clean-pyc clean-test clean-cache \
         health-check check-project-structure check-versions show-deps \
@@ -75,8 +77,6 @@ help: ## Show this help message
 	@echo ""
 	@echo "$(YELLOW)🧪 Testing:$(NC)"
 	@echo "  test             - Run all tests"
-	@echo "  test-unit        - Run tests whose names do not contain \"integration\""
-	@echo "  test-integration - Run tests whose names contain \"integration\""
 	@echo "  test-cov         - Run all tests with coverage report"
 	@echo "  test-watch       - Run tests in watch mode"
 	@echo ""
@@ -84,12 +84,13 @@ help: ## Show this help message
 	@echo "  format           - Format all code"
 	@echo "  format-code      - Format Python code (Ruff)"
 	@echo "  format-check     - Check if code is properly formatted"
+	@echo "  prettier-check   - Check JSON, YAML and Markdown formatting (Prettier)"
 	@echo ""
 	@echo "$(YELLOW)🔍 Code Quality:$(NC)"
 	@echo "  check            - Run all quality checks"
 	@echo "  lint             - Run linting checks (Ruff)"
 	@echo "  type-check       - Run type checking with MyPy"
-	@echo "  code-quality     - Run dead-code checks (Vulture, if installed)"
+	@echo "  code-quality     - Run dead-code checks (Vulture)"
 	@echo "  security-check   - Run security checks (Bandit)"
 	@echo ""
 	@echo "$(YELLOW)🏠 Home Assistant:$(NC)"
@@ -115,7 +116,7 @@ install: validate-config create-venv install-deps setup-pre-commit ## Complete d
 	@echo "  2. Check health: make health-check"
 	@echo "  3. Start testing: make test"
 
-dev-workflow: format check test-unit ## Complete development workflow (format, check, unit tests)
+dev-workflow: format check test ## Complete development workflow (format, check, tests)
 	@echo "$(GREEN)✓$(NC) Development workflow completed"
 
 health-check: check-versions show-deps check-project-structure format-check test-cov check ## Comprehensive project validation
@@ -157,19 +158,9 @@ test: ## Run all tests
 	$(Q)$(PYTEST) tests/ -v
 	@echo "$(GREEN)✓$(NC) All tests completed"
 
-test-unit: ## Run unit tests only
-	$(ECHO) "$(YELLOW)Running unit tests...$(NC)"
-	$(Q)$(PYTEST) tests/ -v -k "not integration"
-	@echo "$(GREEN)✓$(NC) Unit tests completed"
-
-test-integration: ## Run integration tests only
-	$(ECHO) "$(YELLOW)Running integration tests...$(NC)"
-	$(Q)$(PYTEST) tests/ -v -k "integration"
-	@echo "$(GREEN)✓$(NC) Integration tests completed"
-
 test-cov: ## Run all tests with coverage
 	$(ECHO) "$(YELLOW)Running all tests with coverage...$(NC)"
-	$(Q)$(PYTEST) tests/ --cov=$(COMPONENT_PATH) --cov-report=term-missing --cov-report=html --cov-report=xml -v
+	$(Q)$(PYTEST) tests/ -v  # coverage options are in pyproject.toml
 	@echo "$(GREEN)✓$(NC) Coverage report generated (see htmlcov/index.html)"
 
 test-watch: ## Run tests in watch mode
@@ -183,23 +174,24 @@ format: format-code ## Format all code
 
 format-check: ## Check if code is properly formatted (without fixing)
 	$(ECHO) "$(YELLOW)Checking code formatting...$(NC)"
-	
-	
 	$(Q)$(RUFF) format --check $(COMPONENT_PATH)/ tests/
 	@echo "$(GREEN)✓$(NC) Code formatting verified"
 
 format-code: ## Format Python code
 	$(ECHO) "$(YELLOW)Formatting Python code...$(NC)"
-	
-	
 	$(Q)$(RUFF) format $(COMPONENT_PATH)/ tests/
 	$(Q)$(RUFF) check --fix $(COMPONENT_PATH)/ tests/
 	@echo "$(GREEN)✓$(NC) Python code formatted"
 
+prettier-check: ## Check JSON, YAML and Markdown formatting (needs Node.js)
+	$(ECHO) "$(YELLOW)Checking Prettier formatting...$(NC)"
+	$(Q)$(PRETTIER) --check .
+	@echo "$(GREEN)✓$(NC) Prettier formatting verified"
+
 # =============================================================================
 # Code Quality & Linting
 # =============================================================================
-check: lint type-check code-quality security-check ## Run all code quality checks
+check: lint type-check prettier-check code-quality security-check ## Run all code quality checks
 	@echo "$(GREEN)✅ All code quality checks completed$(NC)"
 
 lint: ## Run linting checks
@@ -209,21 +201,17 @@ lint: ## Run linting checks
 
 type-check: ## Run type checking with MyPy
 	$(ECHO) "$(YELLOW)Running type checks...$(NC)"
-	$(Q)$(MYPY) --no-site-packages $(COMPONENT_PATH)/ || echo "$(YELLOW)⚠ Type checking found issues - see output above$(NC)"
+	$(Q)$(MYPY) $(COMPONENT_PATH)/  # strict, see pyproject.toml
 	@echo "$(GREEN)✓$(NC) Type checking completed"
 
 code-quality: ## Run additional code quality checks
 	$(ECHO) "$(YELLOW)Running code quality checks...$(NC)"
-	@if command -v vulture >/dev/null 2>&1; then \
-		vulture $(COMPONENT_PATH)/ --min-confidence 80 --exclude "tests,conftest.py,test_*.py,test__*.py"; \
-	else \
-		echo "$(YELLOW)⚠ vulture not found - install with 'pip install vulture'$(NC)"; \
-	fi
+	$(Q)$(VULTURE) $(COMPONENT_PATH)/ --min-confidence 80 --ignore-names config,entry_data,addr  # unused HA callback arguments
 	@echo "$(GREEN)✓$(NC) Code quality checks completed"
 
 security-check: ## Run security checks
 	$(ECHO) "$(YELLOW)Running security checks...$(NC)"
-	$(Q)$(BANDIT) -r $(COMPONENT_PATH)/ -f json -o security-report.json || echo "$(YELLOW)⚠ Security issues found - see security-report.json$(NC)"
+	$(Q)$(BANDIT) -r $(COMPONENT_PATH)/ -f json -o security-report.json
 	@echo "$(GREEN)✓$(NC) Security checks completed"
 
 # =============================================================================
@@ -278,7 +266,7 @@ clean-test: ## Remove test artifacts
 
 clean-cache: ## Remove tool cache files
 	$(ECHO) "$(YELLOW)Cleaning tool caches...$(NC)"
-	$(Q)rm -rf .ruff_cache/ .mypy_cache/ .claude/
+	$(Q)rm -rf .ruff_cache/ .mypy_cache/
 	@echo "$(GREEN)✓$(NC) Tool caches cleaned"
 
 # =============================================================================
@@ -316,11 +304,6 @@ validate-config: ## Validate project configuration
 	else \
 		echo "$(RED)✗$(NC) pyproject.toml not found"; \
 		exit 1; \
-	fi
-	@if [ -f "pytest.ini" ]; then \
-		echo "$(GREEN)✓$(NC) pytest.ini found"; \
-	else \
-		echo "$(YELLOW)⚠$(NC) pytest.ini not found - tests will use defaults"; \
 	fi
 	@echo "$(GREEN)✓$(NC) Configuration validated"
 
