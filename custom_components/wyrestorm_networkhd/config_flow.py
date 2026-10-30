@@ -98,6 +98,7 @@ class WyreStormConfigFlow(ConfigFlow, domain=DOMAIN):
         """Initialize the flow."""
         self._pending: dict[str, Any] = {}  # validated data waiting for confirm_host_key
         self._placeholders: dict[str, str] = {"fingerprint": "-"}  # presented fingerprint, shown in errors
+        self._presented: str | None = None  # fingerprint presented by the last successful connection test
 
     @staticmethod
     @callback
@@ -108,7 +109,8 @@ class WyreStormConfigFlow(ConfigFlow, domain=DOMAIN):
     async def _async_try_connect(self, data: dict[str, Any]) -> dict[str, str]:
         """Return form errors for `data` (empty if the controller answered); learns the presented key."""
         try:
-            self._placeholders["fingerprint"] = await validate_connection(self.hass, data) or "-"
+            self._presented = await validate_connection(self.hass, data)
+            self._placeholders["fingerprint"] = self._presented or "-"
         except AuthenticationError:
             return {"base": "invalid_auth"}
         except HostKeyMismatchError as err:
@@ -129,9 +131,9 @@ class WyreStormConfigFlow(ConfigFlow, domain=DOMAIN):
         """Validate and test `user_input`; pin a supplied key, or confirm the presented one (TOFU)."""
         data, errors = parse_connection_input(user_input, base)
         if not errors and not (errors := await self._async_try_connect(data)):
-            if CONF_HOST_KEY_FINGERPRINT in data or self._placeholders["fingerprint"] == "-":
+            if CONF_HOST_KEY_FINGERPRINT in data or not self._presented:
                 return self._async_finish(data)  # pinned by the user, or no key reported: store as is
-            self._pending = {**data, CONF_HOST_KEY_FINGERPRINT: [self._placeholders["fingerprint"]]}
+            self._pending = {**data, CONF_HOST_KEY_FINGERPRINT: [self._presented]}
             return await self.async_step_confirm_host_key()
         return self.async_show_form(
             step_id=step_id,
