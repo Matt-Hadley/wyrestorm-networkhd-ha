@@ -3,7 +3,7 @@
 [![GitHub Release](https://img.shields.io/github/release/Matt-Hadley/wyrestorm-networkhd-ha.svg?style=flat-square)](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/releases)
 [![License](https://img.shields.io/github/license/Matt-Hadley/wyrestorm-networkhd-ha.svg?style=flat-square)](LICENSE)
 [![HACS](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=flat-square)](https://hacs.xyz/)
-[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2026.3%2B-41BDF5.svg?style=flat-square)](https://www.home-assistant.io/)
+[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2026.8%2B-41BDF5.svg?style=flat-square)](https://www.home-assistant.io/)
 
 A Home Assistant custom integration for WyreStorm NetworkHD AV-over-IP systems. It connects to the NetworkHD controller
 over SSH and lets you route transmitters to receivers, switch the displays attached to receivers on and off, and see
@@ -13,7 +13,7 @@ It is built on the [wyrestorm-networkhd](https://github.com/Matt-Hadley/wyrestor
 
 ## Requirements
 
-- Home Assistant 2026.3 or newer.
+- Home Assistant 2026.8 or newer.
 - A NetworkHD controller: NHD-000-CTL or NHD-CTL-PRO.
 - **SSH enabled on the controller (port 10022).** The controller's default API access is Telnet, which this integration
   does not support; enable SSH on the controller before adding the integration.
