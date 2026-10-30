@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.1.0](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/compare/v1.0.1...v1.1.0) (2026-10-30)
+
+
+### Features
+
+* pin the controller's SSH host key (trust on first use, optional fingerprint) ([a154b71](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/a154b71097ab40dfba90c0d1649a869a8f265fc5))
+* pin the controller's SSH host key (trust on first use, optional fingerprint) ([cf69bf7](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/cf69bf765fcc9ddb711eea9ed51f9a695c6e2a29))
+
+
+### Bug Fixes
+
+* avoid angle brackets in the fingerprint help text (hassfest treats them as HTML) ([6bc4ab2](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/6bc4ab2099cd419dca8b32894fe352497a378a90))
+* pin the same client after trust on first use and keep polling on a key mismatch ([fbd532e](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/fbd532ec38663e2ef993137ea097ac1e50f5e131))
+* require wyrestorm-networkhd 3.1 for host key pinning ([53857f4](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/53857f42f68100f0c3020bc4c86e722cd4019928))
+
+
+### Documentation
+
+* describe runtime host key mismatch behaviour in the Security section ([6973488](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/69734884115b5c17214a10abb2d22f6b59b456ed))
+* document SSH host key pinning and the fingerprint field ([a5c3b49](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/a5c3b498f7a8b6f7a3e98044806617315c40e883))
+
 ## [1.0.1](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/compare/v1.0.0...v1.0.1) (2026-10-30)
 
 
