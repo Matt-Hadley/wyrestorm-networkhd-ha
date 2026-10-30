@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.1](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/compare/v1.2.0...v1.2.1) (2026-10-30)
+
+
+### Bug Fixes
+
+* remove stale devices outright and drop the obsolete update_interval key ([96fa031](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/96fa0315447e09f0d1b37e5a33a86aa03a72d55b))
+* remove stale devices outright; drop obsolete update_interval key ([3722225](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/372222596e9d92312b992f31ed0258a669ee2939))
+
 ## [1.2.0](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/compare/v1.1.0...v1.2.0) (2026-10-30)
 
 
