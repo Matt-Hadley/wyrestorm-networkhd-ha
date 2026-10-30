@@ -15,8 +15,7 @@ from homeassistant.helpers import (
     device_registry as dr,
     entity_registry as er,
 )
-from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_time_changed, snapshot_platform
-from syrupy.assertion import SnapshotAssertion
+from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_time_changed
 from wyrestorm_networkhd.exceptions import ConnectionError as NHDConnectionError
 from wyrestorm_networkhd.models.api_notifications import NotificationEndpoint, NotificationVideo
 from wyrestorm_networkhd.models.api_query import DeviceJsonString, Matrix
@@ -63,19 +62,86 @@ async def test_setup_not_ready(
     assert config_entry.state is ConfigEntryState.SETUP_RETRY
 
 
-@pytest.mark.parametrize("platform", [Platform.BINARY_SENSOR, Platform.BUTTON, Platform.SELECT])
+RX = "wyrestorm_networkhd_NHD-400-RX-E4CE02BB000"
+TX = "wyrestorm_networkhd_NHD-400-TX-E4CE02AA000"
+DIAG, CONF = er.EntityCategory.DIAGNOSTIC, er.EntityCategory.CONFIG
+# entity_id -> (unique_id, entity_category, original_device_class, translation_key)
+EXPECTED_ENTITIES = {
+    Platform.BINARY_SENSOR: {
+        **{
+            f"binary_sensor.receiver_display{n}_controller_link": (
+                f"{RX}{n}_controller_link",
+                DIAG,
+                "connectivity",
+                "controller_link",
+            )
+            for n in (1, 2)
+        },
+        **{
+            f"binary_sensor.receiver_display{n}_video_output": (
+                f"{RX}{n}_video_output",
+                None,
+                "running",
+                "video_output",
+            )
+            for n in (1, 2)
+        },
+        **{
+            f"binary_sensor.transmitter_source{n}_controller_link": (
+                f"{TX}{n}_controller_link",
+                DIAG,
+                "connectivity",
+                "controller_link",
+            )
+            for n in (1, 2)
+        },
+        **{
+            f"binary_sensor.transmitter_source{n}_video_input": (f"{TX}{n}_video_input", None, "running", "video_input")
+            for n in (1, 2)
+        },
+    },
+    Platform.BUTTON: {
+        **{
+            f"button.receiver_display{n}_display_power_{s}": (
+                f"{RX}{n}_display_power_{s}",
+                None,
+                None,
+                f"display_power_{s}",
+            )
+            for n in (1, 2)
+            for s in ("on", "off")
+        },
+        "button.wyrestorm_networkhd_192_0_2_10_reboot_controller": (
+            "wyrestorm_networkhd_192.0.2.10_controller_reboot",
+            CONF,
+            "restart",
+            "controller_reboot",
+        ),
+    },
+    Platform.SELECT: {
+        f"select.receiver_display{n}_input_source": (f"{RX}{n}_source", None, None, "source") for n in (1, 2)
+    },
+}
+
+
+@pytest.mark.parametrize("platform", list(EXPECTED_ENTITIES))
 async def test_entities(
     hass: HomeAssistant,
     config_entry: MockConfigEntry,
     mock_client: MagicMock,
-    snapshot: SnapshotAssertion,
     platform: Platform,
 ) -> None:
-    """Snapshot each platform's entities; endpoint devices hang off the controller device."""
+    """Each platform creates the expected entities; endpoint devices hang off the controller device."""
     with patch("custom_components.wyrestorm_networkhd.PLATFORMS", [platform]):
         assert await hass.config_entries.async_setup(config_entry.entry_id)
         await hass.async_block_till_done()
-    await snapshot_platform(hass, er.async_get(hass), snapshot, config_entry.entry_id)
+    entries = er.async_entries_for_config_entry(er.async_get(hass), config_entry.entry_id)
+    actual = {
+        e.entity_id: (e.unique_id, e.entity_category, e.original_device_class, e.translation_key) for e in entries
+    }
+    assert actual == EXPECTED_ENTITIES[platform]
+    for entity_id in actual:
+        assert hass.states.get(entity_id).state != STATE_UNAVAILABLE
 
     dev_reg = dr.async_get(hass)
     controller = dev_reg.async_get_device_by_identifier((DOMAIN, HOST), config_entry.entry_id)

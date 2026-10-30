@@ -43,9 +43,6 @@ make test-cov
 # Run specific test file
 .venv/bin/pytest tests/custom_components/wyrestorm_networkhd/test_init.py -v
 
-# Regenerate entity snapshots after an intended entity change
-.venv/bin/pytest tests/custom_components/wyrestorm_networkhd/test_init.py --snapshot-update
-
 # Run with specific pattern
 .venv/bin/pytest -k "test_matrix" -v
 ```
@@ -108,7 +105,7 @@ HA-level tests (tests/custom_components/wyrestorm_networkhd/test_*.py) mock `Net
 1. Create new platform file (e.g., `sensor.py`) with `PARALLEL_UPDATES`
 2. Add platform to `PLATFORMS` in `const.py`
 3. Subclass `WyreStormEndpointEntity`; add the name to `strings.json` (+ copy to `translations/en.json`) and icon to `icons.json`
-4. Add HA-level tests and update snapshots
+4. Add HA-level tests and update EXPECTED_ENTITIES in test_init.py
 
 ### New Service
 1. Add service definition to `services.yaml` and names/descriptions to `strings.json`

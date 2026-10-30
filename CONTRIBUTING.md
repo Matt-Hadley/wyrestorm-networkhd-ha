@@ -48,12 +48,9 @@ make test        # all tests; coverage reports go to htmlcov/ and coverage.xml
 .venv/bin/pytest tests/custom_components/wyrestorm_networkhd/test_services.py -v
 ```
 
-Entity registry snapshots live in `tests/custom_components/wyrestorm_networkhd/snapshots/`. After an intended entity
-change, regenerate them and review the diff:
-
-```bash
-.venv/bin/pytest tests/custom_components/wyrestorm_networkhd/test_init.py --snapshot-update
-```
+The entities each platform creates (entity IDs, unique IDs, categories, device classes) are listed in
+`EXPECTED_ENTITIES` in `tests/custom_components/wyrestorm_networkhd/test_init.py`; update it with any intended entity
+change.
 
 Fixture data must stay anonymised: documentation IP addresses (192.0.2.0/24), made-up MAC addresses and generic aliases.
 
