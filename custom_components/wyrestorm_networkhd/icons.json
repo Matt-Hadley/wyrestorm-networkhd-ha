@@ -1,0 +1,19 @@
+{
+  "entity": {
+    "binary_sensor": {
+      "video_input": { "default": "mdi:arrow-left" },
+      "video_output": { "default": "mdi:arrow-right" }
+    },
+    "button": {
+      "display_power_on": { "default": "mdi:television" },
+      "display_power_off": { "default": "mdi:television-off" }
+    },
+    "select": {
+      "source": { "default": "mdi:video-switch" }
+    }
+  },
+  "services": {
+    "matrix_set": { "service": "mdi:video-switch" },
+    "power_control": { "service": "mdi:television" }
+  }
+}
