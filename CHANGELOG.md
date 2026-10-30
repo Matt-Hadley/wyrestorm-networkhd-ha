@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.2.0](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/compare/v1.1.0...v1.2.0) (2026-10-30)
+
+
+### Features
+
+* add entities for new endpoints without a reload ([af61dbd](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/af61dbda247f3baca552afa63dfa53e4cdbd4422))
+* declare the gold quality scale ([afd67c4](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/afd67c4813b83e360be68b441062932524755548))
+* discover controllers with zeroconf ([9cc8f33](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/9cc8f33de8e32f3f0993a6a98e03f57cd44324a5))
+* Gold quality scale — discovery, MAC identity, dynamic and stale devices ([17a9e59](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/17a9e59e7f473b604fcc4abfde21e820281081b9))
+* identify the controller by its MAC address ([0ffb36f](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/0ffb36f9b9d87ac15040942c00350b5990422510))
+* poll at a fixed 60 s fallback interval, drop the interval option ([19ea996](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/19ea996c698d14e762d24368032278520efb1a2c))
+* remove devices the controller no longer reports ([603e4b9](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/603e4b9a1a5054be89be63249866395a903d81d2))
+* translate setup and update errors ([5f84708](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/5f847080a37fe85c39742593ed4b90bc974551d6))
+
+
+### Bug Fixes
+
+* keep the real controller device for entries reconfigured under 1.0.x ([94cb844](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/94cb844d41d3c8763c192580703bf5144e89e024))
+
+
+### Documentation
+
+* document discovery, data updates, use cases and removal ([58bf587](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/58bf587732f7005c644a5c0fd6878bcd2ca2564c))
+* use Reconfigure when a host-identified controller changes IP ([b535070](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/b535070c24a25001fdb96f3e057e9e84d6b910b9))
+
 ## [1.1.0](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/compare/v1.0.1...v1.1.0) (2026-10-30)
 
 
