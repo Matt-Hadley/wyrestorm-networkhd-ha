@@ -18,7 +18,7 @@ Thank you for your interest in contributing! This project follows modern develop
 
 ### Prerequisites
 
-- **Python 3.11+** (see `pyproject.toml` for exact requirements)
+- **Python 3.14+** (what current Home Assistant requires)
 - **Home Assistant 2024.12.0+** for testing
 - **Git** for version control
 - **Make** (optional but recommended for using project commands)
@@ -46,7 +46,7 @@ This single command will:
 
 ```bash
 # Create virtual environment
-python3.11 -m venv .venv
+python3.14 -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
 # Install package in development mode with all dependencies

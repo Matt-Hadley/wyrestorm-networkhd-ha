@@ -8,7 +8,7 @@
   "integration_type": "device",
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/issues",
-  "requirements": ["wyrestorm-networkhd>=2.1.0"],
+  "requirements": ["wyrestorm-networkhd>=2.2.1,<3"],
   "version": "2.0.0",
   "zeroconf": []
 }

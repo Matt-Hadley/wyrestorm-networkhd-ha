@@ -1,13 +1,13 @@
 [build-system]
-requires = ["setuptools>=80.9.0", "setuptools-scm>=8.1.0"]
+requires = ["setuptools>=80.9.0", "setuptools-scm>=10.0.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "wyrestorm-networkhd-ha"
 dynamic = ["version"]
 description = "Home Assistant integration for WyreStorm NetworkHD matrix switching and device control"
-requires-python = ">=3.11"
-dependencies = ["voluptuous>=0.13.0", "wyrestorm-networkhd>=2.1.0"]
+requires-python = ">=3.14"
+dependencies = ["voluptuous>=0.13.0", "wyrestorm-networkhd>=2.2.1,<3"]
 keywords = [
     "wyrestorm",
     "networkhd",
@@ -25,8 +25,7 @@ classifiers = [
     "Intended Audience :: End Users/Desktop",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Home Automation",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: System :: Hardware",
@@ -39,18 +38,18 @@ packages = ["custom_components.wyrestorm_networkhd"]
 
 [project.optional-dependencies]
 dev = [
-    "ruff>=0.12.0",
-    "pytest>=8.0.0",
+    "ruff>=0.17.0",
+    "pytest>=9.0.0",
     "pytest-cov",
     "pytest-asyncio",
-    "pytest-mock>=3.12.0",
-    "pytest-homeassistant-custom-component>=0.13",
-    "bandit[toml]>=1.7.0",
+    "pytest-mock>=3.17.0",
+    "pytest-homeassistant-custom-component>=0.13.375",
+    "bandit[toml]>=1.9.0",
     "pip-audit>=2.6.0",
-    "mypy>=1.8.0",
+    "mypy>=2.0.0",
     "pre-commit>=3.6.0",
     "vulture>=2.1.4",
-    "setuptools-scm>=8.1.0",
+    "setuptools-scm>=10.0.0",
 ]
 
 [tool.setuptools_scm]
@@ -69,7 +68,7 @@ git_describe_command = [
 # Ruff configuration - replaces Black, isort, and Flake8
 [tool.ruff]
 line-length = 120
-target-version = "py311"
+target-version = "py314"
 exclude = [
     ".git",
     ".venv",
@@ -79,6 +78,8 @@ exclude = [
     ".pytest_cache",
     "custom_components/wyrestorm_networkhd/_version.py",
 ]
+# Markdown code blocks are left to Prettier
+extend-exclude = ["*.md"]
 
 # Ruff formatter configuration (replaces Black)
 [tool.ruff.format]
@@ -109,6 +110,7 @@ known-first-party = ["custom_components.wyrestorm_networkhd"]
 # Pytest configuration
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+asyncio_mode = "auto"
 python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
@@ -149,7 +151,7 @@ exclude_dirs = ["tests", "htmlcov", ".venv", "venv"]
 
 # Mypy configuration
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.14"
 warn_return_any = true
 warn_unused_configs = true
 warn_redundant_casts = true

@@ -162,7 +162,7 @@ class WyreStormVideoInputSensor(CoordinatorEntity[WyreStormCoordinator], BinaryS
             try:
                 frame_rate = float(device.hdmi_in_frame_rate or 0)
                 return frame_rate > 0
-            except (ValueError, TypeError):
+            except ValueError, TypeError:
                 return False
 
         return None
@@ -218,7 +218,7 @@ class WyreStormVideoOutputSensor(CoordinatorEntity[WyreStormCoordinator], Binary
             try:
                 frame_rate = float(device.hdmi_out_frame_rate or 0)
                 return frame_rate > 0
-            except (ValueError, TypeError):
+            except ValueError, TypeError:
                 return False
 
         return None
