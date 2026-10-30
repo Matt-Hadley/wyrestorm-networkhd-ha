@@ -97,4 +97,7 @@ rules:
   inject-websession:
     status: exempt
     comment: The integration does not use HTTP; it talks to the controller over SSH.
-  strict-typing: todo
+  strict-typing:
+    status: done
+    comment:
+      mypy --strict (pyproject.toml) runs in make check and CI, against the installed Home Assistant and library types.

@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+from typing import TypeGuard
 
 from zeroconf import DNSIncoming, DNSOutgoing, DNSPointer, DNSQuestion
 
@@ -31,7 +32,7 @@ def mac_from_name(name: str) -> str | None:
     return re.sub("[:-]", "", match[1] or match[2]).lower()
 
 
-def is_mac(value: str | None) -> bool:
+def is_mac(value: str | None) -> TypeGuard[str]:
     """Return True if `value` is a MAC as stored in unique_id (entries identified by host are not)."""
     return value is not None and re.fullmatch("[0-9a-f]{12}", value) is not None
 

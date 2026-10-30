@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from contextlib import suppress
 from typing import Any
 
-import voluptuous as vol
+import probatio as vol
 from homeassistant.config_entries import (
     SOURCE_RECONFIGURE,
     ConfigFlow,
@@ -145,7 +145,7 @@ class WyreStormConfigFlow(ConfigFlow, domain=DOMAIN):
         if self.source != SOURCE_RECONFIGURE:
             return self.async_create_entry(title=f"WyreStorm NetworkHD ({host})", data=data)
         entry = self._get_reconfigure_entry()
-        if (new_id := self.unique_id or entry.unique_id) != entry.unique_id:
+        if (new_id := self.unique_id or entry.unique_id) and new_id != entry.unique_id:
             async_move_controller_id(self.hass, entry, new_id)
         # data (not data_updates) so a cleared fingerprint is removed.
         return self.async_update_reload_and_abort(

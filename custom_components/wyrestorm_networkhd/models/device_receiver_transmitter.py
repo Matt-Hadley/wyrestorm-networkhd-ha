@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from wyrestorm_networkhd.models.api_query import DeviceInfo, DeviceJsonString, DeviceStatus
@@ -51,7 +51,7 @@ def create_device_from_wyrestorm_models(
     Raises:
         ValueError: if the device type is neither receiver nor transmitter.
     """
-    common = {
+    common: dict[str, Any] = {
         "alias_name": device_json.aliasName,
         "true_name": device_json.trueName,
         "device_type": device_json.deviceType,

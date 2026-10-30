@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-import voluptuous as vol
+import probatio as vol
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant, ServiceCall, callback
 from homeassistant.exceptions import ServiceValidationError
@@ -21,6 +21,7 @@ from .const import (
     SERVICE_POWER_CONTROL,
 )
 from .coordinator import WyreStormCoordinator
+from .models.device_receiver_transmitter import DeviceReceiver, DeviceTransmitter
 
 _NAMES = vol.All(cv.ensure_list, [cv.string], vol.Length(min=1))
 
@@ -78,10 +79,10 @@ def async_setup_services(hass: HomeAssistant) -> None:
         source: str | None = call.data.get(ATTR_SOURCE_DEVICE)
         targets: list[str] = call.data[ATTR_TARGET_DEVICE]
 
-        def resolve(c: WyreStormCoordinator):
-            receivers = [c.find_receiver(name) for name in targets]
+        def resolve(c: WyreStormCoordinator) -> tuple[DeviceTransmitter | None, list[DeviceReceiver]] | None:
+            receivers = [r for name in targets if (r := c.find_receiver(name))]
             transmitter = c.find_transmitter(source) if source else None
-            if None in receivers or (source and transmitter is None):
+            if len(receivers) < len(targets) or (source and transmitter is None):
                 return None
             return transmitter, receivers
 
@@ -91,9 +92,9 @@ def async_setup_services(hass: HomeAssistant) -> None:
     async def handle_power_control(call: ServiceCall) -> None:
         names: list[str] = call.data[ATTR_DEVICES]
 
-        def resolve(c: WyreStormCoordinator):
-            receivers = [c.find_receiver(name) for name in names]
-            return None if None in receivers else receivers
+        def resolve(c: WyreStormCoordinator) -> list[DeviceReceiver] | None:
+            receivers = [r for name in names if (r := c.find_receiver(name))]
+            return receivers if len(receivers) == len(names) else None
 
         coordinator, receivers = _resolve(hass, call, names, resolve)
         await coordinator.async_set_power(receivers, call.data[ATTR_POWER_STATE])

@@ -87,7 +87,7 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
         self.host: str = entry.data[CONF_HOST]
         self.client = create_client(dict(entry.data))
         self.api: NHDAPI
-        self.controller_device_id: str | None = None  # device registry id, set in async_setup_entry
+        self.controller_device_id: str  # device registry id, set in async_setup_entry
         self._lock = asyncio.Lock()  # one command/response exchange at a time
         self._device_status: list[DeviceStatus] = []  # kept for diagnostics
         self._device_info: list[DeviceInfo] = []

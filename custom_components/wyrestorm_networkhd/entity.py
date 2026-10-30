@@ -68,7 +68,7 @@ def async_add_endpoint_entities(
     @callback
     def add_new() -> None:
         data = coordinator.data
-        endpoints = {**data.device_transmitters, **data.device_receivers}
+        endpoints: dict[str, DeviceReceiver | DeviceTransmitter] = {**data.device_transmitters, **data.device_receivers}
         # Forget endpoints whose device was removed (stale), so they get entities again if they come back.
         known.difference_update(
             [
