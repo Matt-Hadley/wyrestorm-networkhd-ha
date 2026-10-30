@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.0.0](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/compare/v0.2.4...v1.0.0) (2026-10-30)
+
+
+### ⚠ BREAKING CHANGES
+
+* requires wyrestorm-networkhd>=3.0.0,<4.
+* services.yaml now documents the registered services matrix_set (source_device optional = disconnect, target_device) and power_control (devices, power_state) instead of set_matrix/set_power; matrix_set takes a single source_device; a new optional config_entry_id field selects the controller. update_interval moved from the connection form to the options flow. iot_class is now local_push. Input Source selects and display power buttons lose their "configuration" entity category.
+
+### Features
+
+* add diagnostics, translations, icons and local brand image ([dcca48d](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/dcca48d32f34a2894569e3fa7748ddce803a89c2))
+* reconnect, availability and per-controller services ([f3745b8](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/f3745b8c3b57f363e9a2a2567a8fbbdd0244571a))
+* require wyrestorm-networkhd 3.x ([4c2c331](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/4c2c3310d3505cc5d6b1c7109562f335b95bf7c3))
+
+
+### Documentation
+
+* ask for HA, library and controller versions and a debug log in bug reports ([d6103e0](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/d6103e051960dce44badf37d2ddc95d0eb99cbba))
+* correct make help descriptions ([d0be4d4](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/d0be4d4ecb9d5db745d2a31468249d766f36e194))
+* rewrite CONTRIBUTING for Python 3.14 and the HA test setup ([5bbc284](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/5bbc284c0e50c762c1c1efa3f8838bd943021075))
+* rewrite README to match the integration ([910b8ec](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/910b8ec43ba56c3a4a1e67d5b3ba54023ee4f749))
+* update CLAUDE.md for the reworked coordinator and services ([8f789f4](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/8f789f4c6320ed162d1b2337699e1694e91b1c4b))
+
 ## [0.2.4](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/compare/v0.2.3...v0.2.4) (2025-09-03)
 
 
