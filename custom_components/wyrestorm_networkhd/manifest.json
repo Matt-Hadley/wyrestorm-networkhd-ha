@@ -7,6 +7,7 @@
   "integration_type": "device",
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/issues",
+  "quality_scale": "gold",
   "requirements": ["wyrestorm-networkhd>=3.1.0,<4"],
   "version": "1.0.0",
   "zeroconf": [{ "type": "_workstation._tcp.local.", "name": "nhd-*ctl*" }]
