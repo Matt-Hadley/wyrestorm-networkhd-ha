@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.5](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/compare/v1.2.4...v1.2.5) (2026-10-31)
+
+
+### Bug Fixes
+
+* require wyrestorm-networkhd 3.1.3 ([c2e7ed7](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/c2e7ed7690932a7f971e66c57cc2bf4deb4c5576))
+* require wyrestorm-networkhd 3.1.3 ([095d974](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/095d974d29807bd29fa9da24a91c0dc313d028f0))
+
 ## [1.2.4](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/compare/v1.2.3...v1.2.4) (2026-10-30)
 
 
