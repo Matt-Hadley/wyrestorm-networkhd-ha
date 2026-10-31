@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.2.6](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/compare/v1.2.5...v1.2.6) (2026-10-31)
+
+
+### Bug Fixes
+
+* drop removed endpoints promptly and address endpoints without an alias ([e5a8c99](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/e5a8c997cc3d5e38162a47796b46316550a7b71f))
+* drop removed endpoints promptly and address endpoints without an alias ([888c570](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/888c570944e50661fffde809d4f5e2fa8d77692e))
+* require wyrestorm-networkhd 3.1.4 ([2f90b94](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/commit/2f90b943690ec158c14287de8af5b90c9c5ed9a9))
+
 ## [1.2.5](https://github.com/Matt-Hadley/wyrestorm-networkhd-ha/compare/v1.2.4...v1.2.5) (2026-10-31)
 
 
