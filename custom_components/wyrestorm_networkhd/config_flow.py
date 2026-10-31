@@ -15,7 +15,6 @@ from homeassistant.config_entries import (
     ConfigFlowResult,
 )
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_PORT, CONF_USERNAME
-from homeassistant.core import HomeAssistant
 from homeassistant.helpers.selector import TextSelector, TextSelectorConfig
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 
@@ -79,7 +78,7 @@ def parse_connection_input(
     return data, {}
 
 
-async def validate_connection(hass: HomeAssistant, data: dict[str, Any]) -> str | None:
+async def validate_connection(data: dict[str, Any]) -> str | None:
     """Connect and query the controller version; return the presented host key fingerprint.
 
     Raises the library's errors on failure.
@@ -109,7 +108,7 @@ class WyreStormConfigFlow(ConfigFlow, domain=DOMAIN):
     async def _async_try_connect(self, data: dict[str, Any]) -> dict[str, str]:
         """Return form errors for `data` (empty if the controller answered); learns the presented key."""
         try:
-            self._presented = await validate_connection(self.hass, data)
+            self._presented = await validate_connection(data)
             self._placeholders["fingerprint"] = self._presented or "-"
         except AuthenticationError:
             return {"base": "invalid_auth"}

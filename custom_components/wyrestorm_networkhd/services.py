@@ -42,6 +42,12 @@ POWER_CONTROL_SCHEMA = vol.Schema(
 )
 
 
+def _find_receivers(coordinator: WyreStormCoordinator, names: list[str]) -> list[DeviceReceiver] | None:
+    """Return the coordinator's receivers for all `names`, or None if any is not one of its receivers."""
+    receivers = [r for name in names if (r := coordinator.find_receiver(name))]
+    return receivers if len(receivers) == len(names) else None
+
+
 def _resolve[T](
     hass: HomeAssistant, call: ServiceCall, names: list[str], resolve: Callable[[WyreStormCoordinator], T | None]
 ) -> tuple[WyreStormCoordinator, T]:
@@ -80,9 +86,9 @@ def async_setup_services(hass: HomeAssistant) -> None:
         targets: list[str] = call.data[ATTR_TARGET_DEVICE]
 
         def resolve(c: WyreStormCoordinator) -> tuple[DeviceTransmitter | None, list[DeviceReceiver]] | None:
-            receivers = [r for name in targets if (r := c.find_receiver(name))]
+            receivers = _find_receivers(c, targets)
             transmitter = c.find_transmitter(source) if source else None
-            if len(receivers) < len(targets) or (source and transmitter is None):
+            if receivers is None or (source and transmitter is None):
                 return None
             return transmitter, receivers
 
@@ -92,11 +98,7 @@ def async_setup_services(hass: HomeAssistant) -> None:
     async def handle_power_control(call: ServiceCall) -> None:
         names: list[str] = call.data[ATTR_DEVICES]
 
-        def resolve(c: WyreStormCoordinator) -> list[DeviceReceiver] | None:
-            receivers = [r for name in names if (r := c.find_receiver(name))]
-            return receivers if len(receivers) == len(names) else None
-
-        coordinator, receivers = _resolve(hass, call, names, resolve)
+        coordinator, receivers = _resolve(hass, call, names, lambda c: _find_receivers(c, names))
         await coordinator.async_set_power(receivers, call.data[ATTR_POWER_STATE])
 
     hass.services.async_register(DOMAIN, SERVICE_MATRIX_SET, handle_matrix_set, schema=MATRIX_SET_SCHEMA)

@@ -73,10 +73,7 @@ class _FrameRateSensor(WyreStormEndpointEntity, BinarySensorEntity):
     @property
     def is_on(self) -> bool | None:
         """Return True if video is active."""
-        try:
-            return float(self._frame_rate or 0) > 0
-        except ValueError, TypeError:
-            return False
+        return (self._frame_rate or 0) > 0
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:

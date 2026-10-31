@@ -53,10 +53,14 @@ def test_union_of_sources() -> None:
 
 
 def test_status_only_device_type_inferred_from_name() -> None:
-    """A device only in status/info gets its type from its true name; unknown types are skipped."""
+    """A device only in status gets its type from its true name and its IP from info; unknown types are skipped."""
     transmitters, receivers = build_device_collections(
         [],
-        [DeviceStatus(aliasname="Src", name="NHD-400-TX-AA"), DeviceStatus(aliasname="X", name="NHD-600-TRX-AA")],
+        [
+            DeviceStatus(aliasname="Src", name="NHD-400-TX-AA"),
+            DeviceStatus(aliasname="X", name="NHD-600-TRX-AA"),
+            DeviceStatus(aliasname="Disp", name="NHD-400-RX-BB"),
+        ],
         [DeviceInfo(aliasname="Disp", name="NHD-400-RX-BB", ip4addr="192.0.2.5")],
     )
 
@@ -64,6 +68,15 @@ def test_status_only_device_type_inferred_from_name() -> None:
     assert transmitters["NHD-400-TX-AA"].online is True
     assert receivers["NHD-400-RX-BB"].ip == "192.0.2.5"
     assert len(transmitters) + len(receivers) == 2
+
+
+def test_device_only_in_cached_info_is_not_present() -> None:
+    """Device info is cached, so a device found only there (deleted on the controller) is not created."""
+    transmitters, receivers = build_device_collections(
+        [], [], [DeviceInfo(aliasname="Disp", name="NHD-400-RX-BB", ip4addr="192.0.2.5")]
+    )
+
+    assert transmitters == receivers == {}
 
 
 def test_invalid_device_type_is_skipped() -> None:
@@ -74,3 +87,10 @@ def test_invalid_device_type_is_skipped() -> None:
 
     assert RX1 not in receivers
     assert len(transmitters) == 2
+
+
+def test_device_without_alias_is_addressed_by_true_name() -> None:
+    """The library rejects empty names, so an endpoint with no alias is sent by its true name (hostname)."""
+    _, receivers = build_device_collections([], [DeviceStatus(aliasname="", name="NHD-400-RX-BB")], [])
+
+    assert receivers["NHD-400-RX-BB"].api_name == "NHD-400-RX-BB"
