@@ -35,14 +35,14 @@ class WyreStormReceiverSourceSelect(WyreStormEndpointEntity, SelectEntity):
     @property
     def options(self) -> list[str]:
         """Return list of available sources."""
-        return [NO_SOURCE, *(tx.alias_name for tx in self.coordinator.data.device_transmitters.values())]
+        return [NO_SOURCE, *(tx.api_name for tx in self.coordinator.data.device_transmitters.values())]
 
     @property
     def current_option(self) -> str | None:
         """Return the currently selected source."""
         if not (device := self.device):
             return None
-        source = self.coordinator.data.matrix_assignments.get(device.alias_name)
+        source = self.coordinator.data.matrix_assignments.get(device.api_name)
         return source if source in self.options else NO_SOURCE
 
     async def async_select_option(self, option: str) -> None:

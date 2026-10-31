@@ -28,7 +28,7 @@ def _json_from_name(name: str, status: DeviceStatus | None, info: DeviceInfo | N
         deviceType=device_type,
         group=[],
         ip=(info.ip4addr if info else None) or "",
-        online=True,  # it answered a status/info query
+        online=True,  # it answered a status query
         sequence=0,
         trueName=name,
     )
@@ -39,10 +39,11 @@ def build_device_collections(
     device_status_list: list[DeviceStatus],
     device_info_list: list[DeviceInfo],
 ) -> tuple[dict[str, DeviceTransmitter], dict[str, DeviceReceiver]]:
-    """Build device collections from the union of all data sources.
+    """Build device collections from the device list and status, enriched with device info.
 
     Endpoints missing from status/info (typically offline ones) are kept so they show as offline
-    instead of disappearing.
+    instead of disappearing. Device info is cached for minutes, so it never makes an endpoint present on its own:
+    an endpoint deleted on the controller would otherwise stay "online" until the cache expired.
     """
     transmitters: dict[str, DeviceTransmitter] = {}
     receivers: dict[str, DeviceReceiver] = {}
@@ -51,7 +52,7 @@ def build_device_collections(
     status_by_name = {d.name: d for d in device_status_list}
     info_by_name = {d.name: d for d in device_info_list}
 
-    for name in json_by_name | status_by_name | info_by_name:
+    for name in json_by_name | status_by_name:
         status = status_by_name.get(name)
         info = info_by_name.get(name)
         device_json = json_by_name.get(name) or _json_from_name(name, status, info)

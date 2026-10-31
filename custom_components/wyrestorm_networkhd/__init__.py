@@ -37,10 +37,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: WyreStormConfigEntry) ->
         hass.config_entries.async_update_entry(
             entry, data={k: v for k, v in entry.data.items() if k != "update_interval"}
         )
-    if not is_mac(entry.unique_id):
-        await _async_adopt_mac(hass, entry)
     coordinator = WyreStormCoordinator(hass, entry)
     await coordinator.async_config_entry_first_refresh()
+    # Only after a refresh has passed the host key check: the mDNS reply naming the MAC is unauthenticated
+    if not is_mac(entry.unique_id):
+        await _async_adopt_mac(hass, entry)
 
     host = entry.data[CONF_HOST]
     controller_id = coordinator.controller_id

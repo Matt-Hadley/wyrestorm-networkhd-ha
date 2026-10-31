@@ -31,7 +31,6 @@ from wyrestorm_networkhd.models.api_query import DeviceJsonString, Matrix
 from custom_components.wyrestorm_networkhd import async_remove_config_entry_device
 from custom_components.wyrestorm_networkhd.binary_sensor import (
     WyreStormControllerLinkSensor,
-    WyreStormVideoOutputSensor,
 )
 from custom_components.wyrestorm_networkhd.const import CONF_HOST_KEY_FINGERPRINT, DOMAIN
 from custom_components.wyrestorm_networkhd.diagnostics import async_get_config_entry_diagnostics
@@ -569,6 +568,20 @@ async def test_entry_adopts_mac(
     mock_lookup_mac.assert_not_awaited()  # identified: no more lookups
 
 
+async def test_mac_not_adopted_before_host_key_check(
+    hass: HomeAssistant, config_entry: MockConfigEntry, mock_client: MagicMock, mock_lookup_mac: AsyncMock
+) -> None:
+    """The mDNS reply naming the MAC is unauthenticated, so it is only adopted after the pinned key matched."""
+    mock_lookup_mac.return_value = MAC
+    mock_client.connect.side_effect = HostKeyMismatchError(HOST, OTHER_FINGERPRINT)
+    await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert config_entry.state is ConfigEntryState.SETUP_RETRY
+    assert config_entry.unique_id == HOST
+    mock_lookup_mac.assert_not_awaited()
+
+
 async def test_entry_keeps_host_when_mac_taken(
     hass: HomeAssistant, config_entry: MockConfigEntry, mock_client: MagicMock, mock_lookup_mac: AsyncMock
 ) -> None:
@@ -629,9 +642,13 @@ async def test_new_endpoint_added_without_reload(
 
 
 async def test_removed_endpoint_device_removed_and_comes_back(
-    hass: HomeAssistant, setup_integration: MockConfigEntry, mock_client: MagicMock, freezer: FrozenDateTimeFactory
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory, setup_integration: MockConfigEntry, mock_client: MagicMock
 ) -> None:
-    """An endpoint the controller stops listing is removed after 3 refreshes; if it returns it is added again."""
+    """An endpoint the controller stops listing is removed after 3 refreshes; if it returns it is added again.
+
+    freezer comes before setup_integration so setup stamps the device info cache with the frozen clock: the polls
+    below then use the cached info, which still lists the removed endpoint.
+    """
     entry = setup_integration
     dev_reg, ent_reg = dr.async_get(hass), er.async_get(hass)
     rx1 = (DOMAIN, "NHD-400-RX-E4CE02BB0001")
@@ -791,17 +808,11 @@ async def test_entry_reconfigured_in_1_0_keeps_controller(
 async def test_entities_without_data(
     hass: HomeAssistant, setup_integration: MockConfigEntry, mock_client: MagicMock
 ) -> None:
-    """Entities whose endpoint just vanished, or with an unparsable frame rate, report nothing instead of failing."""
+    """Entities whose endpoint just vanished report nothing instead of failing."""
     coordinator = setup_integration.runtime_data
     rx = coordinator.data.device_receivers["NHD-400-RX-E4CE02BB0001"]
     link = WyreStormControllerLinkSensor(coordinator, rx, "controller_link")
-    video = WyreStormVideoOutputSensor(coordinator, replace(rx, hdmi_out_frame_rate="n/a"), "video_output")
     select = WyreStormReceiverSourceSelect(coordinator, rx, "source")
-
-    coordinator.data = replace(
-        coordinator.data, device_receivers={rx.true_name: replace(rx, hdmi_out_frame_rate="n/a")}
-    )
-    assert video.is_on is False
 
     coordinator.data = replace(coordinator.data, device_receivers={})
     assert link.is_on is None

@@ -275,7 +275,7 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
     # Commands
     async def async_set_matrix(self, source: DeviceTransmitter | None, receivers: list[DeviceReceiver]) -> None:
         """Route `source` to `receivers` (None disconnects them), then re-read the matrix."""
-        rx = [r.alias_name for r in receivers]
+        rx = [r.api_name for r in receivers]
         async with self._lock:
             try:
                 await self._ensure_connected()
@@ -283,7 +283,7 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 if source is None:
                     await switch.matrix_set_null(rx)
                 else:
-                    await switch.matrix_set(source.alias_name, rx)
+                    await switch.matrix_set(source.api_name, rx)
             except API_ERRORS as err:
                 raise self._command_failed(err) from err
             try:
@@ -305,7 +305,7 @@ class WyreStormCoordinator(DataUpdateCoordinator[CoordinatorData]):
             try:
                 await self._ensure_connected()
                 await self.api.connected_device_control.config_set_device_sinkpower(
-                    power=power_state, rx=[r.alias_name for r in receivers]
+                    power=power_state, rx=[r.api_name for r in receivers]
                 )
             except API_ERRORS as err:
                 raise self._command_failed(err) from err

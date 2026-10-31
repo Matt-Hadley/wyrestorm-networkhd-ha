@@ -24,6 +24,11 @@ class DeviceBase:
     mac: str | None = None
     version: str | None = None
 
+    @property
+    def api_name(self) -> str:
+        """The name to send to the controller: the alias, or the true name (hostname) when there is none."""
+        return self.alias_name or self.true_name
+
     def get_device_display_name(self) -> str:
         """Return "DeviceType - DisplayName", preferring the alias, then the IP, then the true name."""
         return f"{self.device_type} - {self.alias_name or self.ip or self.true_name}"
